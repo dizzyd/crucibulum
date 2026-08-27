@@ -1,0 +1,72 @@
+namespace Crucibulum;
+
+/// <summary>
+/// Written to ModConfig/crucibulum.json on first run.
+/// </summary>
+public class CrucibulumConfig
+{
+    /// <summary>
+    /// Degrees added to the forge's own fuel-derived ceiling (700 + the fuel's inForge.tempGainDeg)
+    /// when a crucible is sitting in it. 400 puts coke at 1200 C, charcoal at 1150, bituminous coal
+    /// at 1100, lignite at 1000 and contaminated coal at 900 -- so fuel choice still decides which
+    /// metals you can melt, but copper no longer needs a bellows.
+    /// </summary>
+    public int CrucibleTempBonus = 400;
+
+    /// <summary>
+    /// Hard ceiling on crucible temperature. 0 means "use the crucible's own maxHeatableTemp
+    /// attribute", which vanilla ships as 1200 C. This is what keeps iron (1500 C) out of reach
+    /// even with a bellows running.
+    /// </summary>
+    public int MaxCrucibleTemperature = 0;
+
+    /// <summary>
+    /// Multiplier on how fast the charge melts once it is up to temperature. 1 matches the firepit.
+    /// </summary>
+    public float MeltSpeedMultiplier = 1f;
+
+    /// <summary>
+    /// How fast the forge burns while working a crucible, against the firepit's rate per second.
+    ///
+    /// The forge burns on the calendar and the firepit on the real clock, which left melting over
+    /// a forge six times cheaper for the same charge. This closes that gap.
+    ///
+    /// Note it is a rate, not a bill: what a job actually costs also depends on how long it takes,
+    /// and the forge spends longer bringing a charge up to temperature than a firepit does. Over a
+    /// whole job - heating and melting together - the default 0.6 lands a forge melt at roughly
+    /// 0.65 of a firepit's fuel for a small charge and 0.8 for a brim-full crucible, so the forge
+    /// stays the better place to melt without making fuel meaningless.
+    ///
+    /// Set it to 0 to go back to the vanilla forge burn rate and the six-fold discount.
+    /// </summary>
+    public float CrucibleFuelUseVsFirepit = 0.6f;
+
+    /// <summary>
+    /// What a melt costs to keep liquid, as a fraction of what it cost to make.
+    ///
+    /// Once the metal is molten the fire is only replacing what the crucible loses to the air, so
+    /// holding is cheap: the default 0.25 leaves a molten crucible costing a quarter of what the
+    /// melt did, and barely more than an empty forge.
+    /// </summary>
+    public float MoltenHoldFuelShare = 0.35f;
+
+    /// <summary>
+    /// The thermal mass of the crucible itself, in ingot-equivalents.
+    ///
+    /// A charge heats the crucible in proportion to how much metal is in it against how much the
+    /// clay itself soaks up, so this sets how much the charge size matters. At the default 3, an
+    /// empty crucible climbs at full speed, a single ingot's worth of ore takes about a third
+    /// longer, and a brim-full seven-ingot crucible takes over three times as long to reach
+    /// temperature. Raise it to flatten the difference out.
+    /// </summary>
+    public float CrucibleThermalMass = 3f;
+
+    /// <summary>
+    /// How briskly the crucible climbs towards the temperature the fuel can hold it at.
+    ///
+    /// The climb is proportional to how far there is left to go, so it is quick while the crucible
+    /// is cold and eases in over the last stretch. 0.5 brings a cold crucible up in a coke forge in
+    /// about two minutes; raise it to heat faster.
+    /// </summary>
+    public float HeatRate = 0.5f;
+}

@@ -1,0 +1,13 @@
+{
+    "type": "code",
+    "modid": "crucibulum",
+    "name": "Crucibulum",
+    "authors": [
+        "Dave (Dizzy) Smith"
+    ],
+    "description": "Set a crucible in the forge and melt metal where you smith it. The crucible glows through the incandescence range as it heats and turns molten when the charge is ready to pour.",
+    "version": "1.0.0",
+    "dependencies": {
+        "game": "1.22.0"
+    }
+}

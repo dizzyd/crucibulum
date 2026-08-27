@@ -1,0 +1,14 @@
+[
+	{
+		"file": "game:blocktypes/stone/generic/forge.json",
+		"op": "replace",
+		"path": "/class",
+		"value": "CrucibulumForge"
+	},
+	{
+		"file": "game:blocktypes/stone/generic/forge.json",
+		"op": "replace",
+		"path": "/entityClass",
+		"value": "CrucibulumForge"
+	}
+]
