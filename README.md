@@ -136,8 +136,8 @@ going into changing the metal's state rather than raising its temperature.
 | 140 nuggets (700 units) | 153s | 210s | 363s | 5.4 *(6.6)* |
 
 **Holding it liquid** is cheap. Once the metal is molten the fire is only replacing what the
-crucible loses to the air, so a molten crucible burns a quarter of what melting burned, barely
-more than an empty forge. Let it go solid and it is a full melt to do over again.
+crucible loses to the air, so a molten crucible burns about a third of what melting burned,
+barely more than an empty forge. Let it go solid and it is a full melt to do over again.
 
 | what the fire is doing | one coke lasts |
 |---|---|

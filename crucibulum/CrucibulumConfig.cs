@@ -45,8 +45,9 @@ public class CrucibulumConfig
     /// What a melt costs to keep liquid, as a fraction of what it cost to make.
     ///
     /// Once the metal is molten the fire is only replacing what the crucible loses to the air, so
-    /// holding is cheap: the default 0.25 leaves a molten crucible costing a quarter of what the
-    /// melt did, and barely more than an empty forge.
+    /// holding is cheap: the default 0.35 leaves a molten crucible costing about a third of what
+    /// the melt did - one lump of coke lasts 190s against melting's 67s - and barely more than an
+    /// empty forge's 240s.
     /// </summary>
     public float MoltenHoldFuelShare = 0.35f;
 

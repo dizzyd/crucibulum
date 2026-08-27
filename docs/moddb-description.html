@@ -1,0 +1,103 @@
+<p><strong>Crucibulum</strong> is the Medieval Latin word English took &ldquo;crucible&rdquo;
+from. It meant the little melting pot, and it also meant a night lamp &mdash; the same small
+vessel holding the same small fire, put to two uses. The figurative sense came out of the metal
+and not the other way round: a crucible was a pot for a very long time before it was a trial by
+fire.</p>
+
+<p>This mod is the literal one. Vanilla asks you to keep two fires: the firepit melts, the forge
+smiths, and you walk between them. The 1.22 forge is the better fire &mdash; fuel types that
+matter, a bellows that drives the temperature &mdash; and it stands idle between heats.
+Crucibulum puts a crucible in it.</p>
+
+<table>
+<tr><th></th><th>firepit</th><th>forge + crucible</th></tr>
+<tr><td>melts</td><td>yes</td><td><strong>yes</strong></td></tr>
+<tr><td>ceiling</td><td>fuel burn temp</td><td>1200 &deg;C</td></tr>
+<tr><td>smith at the same fire</td><td>no</td><td><strong>yes</strong></td></tr>
+<tr><td>700 units of tin bronze</td><td>6.6 coke</td><td><strong>5.4 coke</strong></td></tr>
+<tr><td>keeping a melt liquid</td><td>same as melting</td><td><strong>a third of melting</strong></td></tr>
+<tr><td>nickel (1325 &deg;C)</td><td>yes</td><td>no</td></tr>
+</table>
+
+<p>The firepit keeps the top of the range. A crucible in a forge is clamped at 1200 &deg;C, so
+nickel still wants a firepit, and iron is bloomery work as it always was.</p>
+
+<h3>Using it</h3>
+<p><strong>Right-click</strong> the forge with a crucible to set it in, or shift-right-click
+&mdash; either works, as at a firepit. <strong>Right-click</strong> the forge to open the
+crucible window; <strong>shift-right-click with an empty hand</strong> to take the crucible back
+out. <strong>Shift-right-click</strong> ore or ingots to drop one in a click at a time, or hold
+<strong>Ctrl</strong> for the whole stack.</p>
+
+<p><strong>Smithing is untouched.</strong> A forge holding an ingot hands it over on a plain
+right-click exactly as it always did, and burns fuel at exactly the rate it always did.</p>
+
+<h3>The window</h3>
+<p>Laid out like the firepit's, because that is the one you already know. What it adds is the
+blend &mdash; each metal's share of the melt, quoted in the same units alloy recipes are written
+in, so twenty nuggets and one ingot weigh the same:</p>
+
+<p><code>Copper 90% &middot; Tin 10%<br>Will create 100 units of Tin bronze</code></p>
+
+<p>Get the ratio wrong and vanilla tells you nothing at all, which looks exactly like a mix that
+is fine but cold. This says so, and says what it wants:</p>
+
+<p><code>Copper 40% &middot; Tin 60%<br>These will not combine<br>Tin bronze needs Tin 8-12%,
+Copper 88-92%</code></p>
+
+<p>If the metals make no alloy at all it says they will not combine and quotes no ratio, rather
+than sending you after a recipe that does not exist. All of it is in the block info too, so you
+need not open anything for the common case.</p>
+
+<h3>Heat</h3>
+<p>A charge comes up to temperature, melts, and is then held. Each is different work for the
+fire.</p>
+
+<p>The climb is proportional to how far there is left to go, so it is brisk while the crucible
+is cold and eases in over the last stretch. <strong>More metal climbs more slowly</strong> &mdash;
+the same fire poured into a brim-full crucible takes over three times as long as into an empty
+one. While the charge is actually melting the temperature all but stops rising, which is latent
+heat: the energy is going into changing the metal's state rather than raising its temperature.</p>
+
+<ul>
+<li><strong>20 nuggets</strong> &mdash; 61s to temperature, then 30s melting</li>
+<li><strong>60 nuggets</strong> &mdash; 92s, then 90s</li>
+<li><strong>140 nuggets</strong> &mdash; 153s, then 210s (a full 700-unit crucible)</li>
+</ul>
+
+<p>Tip cold ore into a hot crucible and you cool the whole lot, weighted against what is already
+in there &mdash; so topping up a nearly-molten crucible genuinely sets you back.</p>
+
+<p>Once the metal is liquid the fire is only replacing what the crucible loses to the air, so
+<strong>holding a melt costs about a third of what making it did</strong>. One lump of coke lasts
+67 seconds while melting and 190 while holding, against 240 in an empty forge. Let it go solid
+and it is a full melt to do again.</p>
+
+<h3>Fuel</h3>
+<p>What you burn decides what you can melt, unaided:</p>
+
+<ul>
+<li><strong>coke</strong> &mdash; 1200 &deg;C, up to cupronickel</li>
+<li><strong>charcoal</strong> &mdash; 1150 &deg;C, up to copper</li>
+<li><strong>bituminous coal, anthracite</strong> &mdash; 1100 &deg;C, up to copper</li>
+<li><strong>lignite</strong> &mdash; 1000 &deg;C, up to silver</li>
+<li><strong>contaminated coal</strong> &mdash; 900 &deg;C, up to bismuth bronze</li>
+</ul>
+
+<p>Anything below a row's ceiling melts on that fuel. Run a bellows in and the ceiling is
+multiplied as it is for any forge &mdash; but the 1200 &deg;C clamp does not move, so iron stays
+out of reach however hard you blow.</p>
+
+<p>The crucible glows through the incandescence range as it heats, and changes colour again the
+moment the charge goes liquid, so a forge across the yard tells you whether it is ready.</p>
+
+<h3>Notes</h3>
+<ul>
+<li>Two JSON patches and <strong>no Harmony</strong>. The forge blocktype is repointed at
+subclasses of the vanilla forge classes; nothing is patched at runtime.</li>
+<li>The ore lives in the forge, not in the crucible &mdash; exactly as a firepit holds it. Pull a
+crucible out mid-melt and the ore stays behind in the coals, and breaking the forge drops it.</li>
+<li>Every alloy recipe in the game works, because the smelting is vanilla's own.</li>
+<li>Every number above is configurable in <code>ModConfig/crucibulum.json</code>.</li>
+<li>Named for the Latin. Everything in game is still called a crucible.</li>
+</ul>
