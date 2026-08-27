@@ -119,10 +119,18 @@ if src.exists():
     # the window shot. Centring a square on the frame instead puts the forge in a corner: LookAt
     # aims below the subject to fight the bottom-heavy crop, so the forge is not where the eye is.
     ICON = (700, 410, 1200, 910)
-    Image.open(src).crop(ICON).resize((480, 480), Image.LANCZOS).save(icon)
+    im = Image.open(src).crop(ICON).resize((480, 480), Image.LANCZOS)
+    # A screenshot-derived PNG is nearly 300KB at full colour and half that on a 256-colour
+    # palette, with no difference anyone will see at icon size. It rides in every download.
+    im.convert("P", palette=Image.ADAPTIVE, colors=256).save(icon, optimize=True)
     print(f"    07-icon-source.png  ->  {icon.name}  480x480")
 PY
 
 ls -la "$OUT"/*.png "$REPO/crucibulum/modicon.png" 2>/dev/null
+
+# The icon is a build input, and a zip built before it existed silently has none.
+echo
+echo "the icon is picked up at build time - rebuild to get it into the zip:"
+echo "  bash scripts/install-to-pack.sh"
 
 [ "$SHOTS_OK" = 1 ] || { echo; echo "NOTE: at least one scene failed - see /tmp/cru-shotrun.log"; exit 1; }

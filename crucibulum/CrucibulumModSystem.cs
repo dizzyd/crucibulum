@@ -22,11 +22,12 @@ public class CrucibulumModSystem : ModSystem
             api.Logger.Error("[crucibulum] {0} is malformed, falling back to defaults: {1}", ConfigFile, e.Message);
         }
 
-        if (config == null)
-        {
-            config = new CrucibulumConfig();
-            api.StoreModConfig(config, ConfigFile);
-        }
+        // Always write it back, not only when it is missing. A config from an older version parses
+        // fine and quietly keeps its defaults for anything added since, so the file on disk ends up
+        // describing settings that are no longer the ones in effect - and the new knobs are not
+        // there to be turned. Rewriting adds what is new and drops what has been removed.
+        config ??= new CrucibulumConfig();
+        api.StoreModConfig(config, ConfigFile);
 
         Config = config;
     }
