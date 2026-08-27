@@ -3,3 +3,8 @@ obj/
 Releases/
 .idea
 *.DotSettings.user
+
+# Screenshots and the mod icon are generated, not authored: scripts/make-shots.sh drives a real
+# game and produces them. The mechanism is tracked, the output is not.
+docs/screenshots/*.png
+crucibulum/modicon.png

@@ -284,6 +284,22 @@ rather than five times — a sync serialises all six slots to every client in ra
 For reference, `base.GetBlockInfo` — vanilla's own, resolving the crucible's display name — costs
 7.5 us of the 8 us total. The mod's share is the remaining half microsecond.
 
+## Screenshots
+
+`docs/screenshots/` holds the ModDB set and `crucibulum/modicon.png` the icon. Both are
+generated rather than hand-taken, and **neither is tracked** — only the mechanism is. Reproduce
+them with:
+
+```bash
+bash scripts/make-shots.sh
+```
+
+The icon is a build input, so a zip built from a fresh clone carries no icon until this has been
+run once; the build itself is unaffected.
+
+See `docs/screenshots/README.md` for what each shot shows and the handful of things a shot needs
+that a test run does not.
+
 ## Testing
 
 75 in-game tests under `tests/`, run against a real game with
