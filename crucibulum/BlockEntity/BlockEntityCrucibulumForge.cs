@@ -200,16 +200,16 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
             return PutCrucible(slot, byPlayer, blockSel);
         }
 
-        // Smithing has to keep working. A plain click on a forge holding an ingot, a plate or a
-        // work item still hands it over - that is the whole rhythm of working at an anvil - and a
-        // plain click with something in hand on a bare forge still does nothing at all, rather
-        // than putting a window in the smith's face.
+        // The window belongs to the crucible, so it only opens for a forge that is holding one.
+        // A bare forge stays a bare forge: clicking it does nothing, exactly as in vanilla.
         //
-        // A forge holding a crucible opens whatever is in hand, which also stops a hot crucible
-        // being yanked out by a click meant for the window.
-        bool holdingCrucible = CrucibleStack != null;
-        if (!holdingCrucible && (!WorkItemSlot.Empty || !slot.Empty)) return false;
+        // Smithing keeps working for the same reason. A forge holding an ingot, a plate or a work
+        // item hands it over on a plain click - that is the whole rhythm of working at an anvil -
+        // because there is no crucible in it to open a window for.
+        if (CrucibleStack == null) return false;
 
+        // With a crucible in, the click opens whatever is in hand, which also stops a hot crucible
+        // being yanked out by a click meant for the window.
         ToggleDialog(byPlayer);
         return true;
     }

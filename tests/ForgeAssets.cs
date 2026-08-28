@@ -28,7 +28,6 @@ namespace Crucibulum.Tests
             "crucibulum:forge-nomix",
             "crucibulum:forge-alloy-needs",
             "crucibulum:forge-alloy-part",
-            "crucibulum:dlg-charge",
             "crucibulum:dlg-empty",
             "crucibulum:dlg-nocrucible",
             "crucibulum:dlg-nofuel",

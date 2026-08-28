@@ -15,7 +15,7 @@ Same gestures a firepit uses.
 
 | | |
 |---|---|
-| **Right click**, empty handed | open the crucible window |
+| **Right click** a forge holding a crucible | open the crucible window |
 | **Right click** with a crucible | set it in the forge |
 | **Shift + right click** with a crucible | set it in the forge |
 | **Shift + right click**, empty handed | take the crucible back out |
@@ -41,8 +41,9 @@ Fuel, ignition and work items are untouched — the forge still does everything 
 
 ### The crucible window
 
-Right click the forge and it opens: the four ingredient slots across the top, then what they
-will make, then the crucible with its temperature and a melt bar, then the fuel.
+Right click a forge with a crucible in it and the window opens: the four ingredient slots across
+the top, then what they will make, then the crucible with its temperature and a melt bar, then
+the fuel.
 
 There is no output slot and so no arrow between two of them — a crucible is not a furnace moving
 metal from one slot to another, it *becomes* the molten thing in place. The melt bar only appears

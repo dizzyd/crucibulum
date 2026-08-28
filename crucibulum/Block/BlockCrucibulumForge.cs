@@ -99,13 +99,10 @@ public class BlockCrucibulumForge : BlockForge
                     MouseButton = EnumMouseButton.Right,
                     GetMatchingStacks = (wi, bs, es) =>
                     {
-                        // Only where a plain click actually opens it: a forge holding an ingot hands
-                        // the ingot over instead, and must keep saying so.
+                        // Only where a plain click actually opens it, which is only a forge with a
+                        // crucible in it. A bare forge, or one holding an ingot, does something else.
                         var be = api.World.BlockAccessor.GetBlockEntity(bs.Position) as BlockEntityCrucibulumForge;
-                        if (be == null) return null;
-                        return be.WorkItemStack == null || be.CrucibleStack != null
-                            ? System.Array.Empty<ItemStack>()
-                            : null;
+                        return be?.CrucibleStack != null ? System.Array.Empty<ItemStack>() : null;
                     }
                 },
                 new WorldInteraction

@@ -52,15 +52,16 @@ namespace Crucibulum.Tests
         }
 
         [VsTest(TimeoutMs = 90000), RequiresClient]
-        public async Task APlainClickOnAnEmptyForgeOpensItToo()
+        public async Task ABareForgeOpensNothing()
         {
+            // The window belongs to the crucible. A forge with nothing in it stays a bare forge,
+            // and clicking it does what clicking a bare forge has always done: nothing.
             await EmptyHandedAtAForge();
 
             await Interact.UseBlock(ForgePos, BlockFacing.UP);
+            await Ticks(10);
 
-            await Gui.WaitFor<GuiDialogCrucibleForge>(120);
-            await Input.Press(GlKeys.Escape);
-            await Gui.WaitGone<GuiDialogCrucibleForge>(120);
+            Assert.False(await Gui.IsOpen<GuiDialogCrucibleForge>(), "no window on an empty forge");
         }
 
         [VsTest(TimeoutMs = 90000), RequiresClient]

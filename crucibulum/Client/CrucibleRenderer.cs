@@ -48,26 +48,30 @@ public class CrucibleRenderer : IRenderer, ITexPositionSource
     private const float FullUnits = 500f;
 
     /// <summary>
-    /// Where the body's glow starts and how hard it climbs. Deliberately gentler than the forge's
-    /// own curve, and capped short of full: ceramic that has stopped showing its own shape reads as
-    /// a bug rather than as heat.
-    /// </summary>
-    public static float GlowStartTemp = 450f;
-    public static float GlowDivisor = 5f;
-    public static int GlowCeiling = 150;
-
-    /// <summary>
-    /// While the charge is still solid the body's colour is taken from this temperature rather than
-    /// its real one, so the shell stays in the orange part of the incandescence curve however hot
-    /// the forge gets. Physically it is the honest answer -- the outside of a crucible is cooler
-    /// than what is in it -- and it leaves somewhere brighter to go.
+    /// The hue comes off vanilla's incandescence ramp at the crucible's real temperature, on the
+    /// forge's own schedule from ForgeContentsRenderer: nothing below 550 degC, then red through
+    /// orange to pale yellow. Matching that matters because the crucible is drawn beside an ingot
+    /// heating on the same coals and beside its own icon in the window, and both of those use this
+    /// ramp - anything else reads as the wrong colour rather than as a choice.
     ///
-    /// The moment the metal turns liquid the cap comes off and the whole crucible jumps to its real
-    /// colour, pale yellow-white. That hue change is the "ready to pour" signal: visible across a
-    /// workshop, and it does not depend on being able to see down into the mouth, which from a
-    /// standing player's eye height you largely cannot.
+    /// An earlier version held the hue down to 900 degC while the charge was still solid, to keep
+    /// somewhere brighter to go for the moment it turned liquid. That backfired: 900 is exactly
+    /// where the ramp is pure red with no green in it at all, so a crucible spent its whole heat-up
+    /// pinned at flat salmon while its own icon two feet away was orange-gold.
+    ///
+    /// How *far* that colour is mixed over the texture is capped, though, and that is not vanilla.
+    /// An ingot may sensibly turn into a featureless bright blob, because at that heat it is one; a
+    /// crucible doing it just looks like a rendering fault, and the window's own icon does not do it
+    /// either. Capping the mix keeps the shape while the hue does the talking.
+    ///
+    /// The cap applies to the mix alone. Bloom - ExtraGlow - runs the full vanilla ramp, because the
+    /// two answer different questions: how much of the crucible you still see, versus how much light
+    /// it is throwing. Capping both left a molten crucible looking cooler than the coals underneath
+    /// it, which is backwards.
     /// </summary>
-    public static int BodyColorCeiling = 900;
+    public static float GlowStartTemp = 550f;
+    public static float GlowDivisor = 2f;
+    public static int GlowCeiling = 150;
 
     public double RenderOrder => 0.5;
     public int RenderRange => 24;
@@ -159,9 +163,10 @@ public class CrucibleRenderer : IRenderer, ITexPositionSource
         int temp = (int)crucible.Collectible.GetTemperature(capi.World, crucible);
         bool molten = IsMolten(crucible, melt.Key);
 
-        float[] bodyColor = ColorUtil.GetIncandescenceColorAsColor4f(molten ? temp : Math.Min(temp, BodyColorCeiling));
-        float[] meltColor = ColorUtil.GetIncandescenceColorAsColor4f(temp);
-        int bodyGlow = GameMath.Clamp((int)((temp - GlowStartTemp) / GlowDivisor), 0, GlowCeiling);
+        float[] bodyColor = ColorUtil.GetIncandescenceColorAsColor4f(temp);
+        float[] meltColor = bodyColor;
+        int bodyGlow = GameMath.Clamp((int)((temp - GlowStartTemp) / GlowDivisor), 0, 255);
+        int bodyMix = Math.Min(bodyGlow, GlowCeiling);
 
         IRenderAPI rpi = capi.Render;
         Vec3d camPos = capi.World.Player.Entity.CameraPos;
@@ -192,7 +197,7 @@ public class CrucibleRenderer : IRenderer, ITexPositionSource
             .Translate(pos.X - camPos.X, pos.Y - camPos.Y + 11 / 16f + (be.FuelLevel - 1) / 16f / 4f, pos.Z - camPos.Z)
             .Values;
 
-        prog.RgbaGlowIn = new Vec4f(bodyColor[0], bodyColor[1], bodyColor[2], bodyGlow / 255f);
+        prog.RgbaGlowIn = new Vec4f(bodyColor[0], bodyColor[1], bodyColor[2], bodyMix / 255f);
         prog.ExtraGlow = bodyGlow;
         rpi.RenderMultiTextureMesh(bodyRef, "tex");
 

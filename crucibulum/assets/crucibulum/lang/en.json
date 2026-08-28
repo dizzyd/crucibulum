@@ -14,7 +14,6 @@
 	"forge-alloy-needs": "{0} needs {1}",
 	"forge-alloy-part": "{0} {1}-{2}%",
 	"forge-crucible-title": "Forge crucible",
-	"dlg-charge": "Crucible contents",
 	"dlg-nocrucible": "Set a crucible in the forge to melt metal",
 	"dlg-empty": "Add ore, nuggets or ingots",
 	"dlg-nofuel": "No fuel",

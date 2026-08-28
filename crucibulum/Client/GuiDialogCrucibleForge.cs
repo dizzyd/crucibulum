@@ -66,7 +66,7 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
 
         CairoFont statusFont = CairoFont.WhiteDetailText();
 
-        chargeSlotBounds = ElementStdBounds.SlotGrid(EnumDialogArea.None, 0, 30, 4, 1);
+        chargeSlotBounds = ElementStdBounds.SlotGrid(EnumDialogArea.None, 0, 8, 4, 1);
 
         // The status block is measured rather than given a fixed height. One line for a plain melt,
         // three for a mix that will not combine - reserving room for the worst case left a hole
@@ -118,8 +118,6 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
             .AddDialogTitleBar(DialogTitle, () => TryClose())
             .BeginChildElements(bgBounds)
                 .AddDynamicCustomDraw(panelBounds, OnBgDraw, "symbolDrawer")
-                .AddStaticText(Lang.Get("crucibulum:dlg-charge"), CairoFont.WhiteSmallText(), ElementBounds.Fixed(0, 6, panelWidth, 22))
-
                 .AddItemSlotGrid(Inventory, SendInvPacket, 4, chargeSlotIds, chargeSlotBounds, "chargeSlots")
 
                 .AddDynamicText("", statusFont, statusBounds, "statusText")
