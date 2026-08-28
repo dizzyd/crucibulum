@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Threading.Tasks;
 using Crucibulum;
 using Vintagestory.API.Client;
@@ -298,6 +299,104 @@ namespace Crucibulum.Tests
             Assert.Contains(sb.ToString(), "10x", "and ten straight after adding six more");
         }
 
+        [VsTest]
+        public async Task TheFuelSlotCannotBeOverfilled()
+        {
+            // The forge draws its coal bed, and the crucible sitting on it, higher as it fills:
+            // y + (fuelLevel - 1) / 64 blocks. Vanilla keeps that in range by refusing fuel over a
+            // level of 4.5, but that guard is in the shift-click path rather than in the slot - so
+            // when this window still had a fuel slot, a whole stack of 64 went in and lifted the
+            // coals and the crucible a full block into the air above the forge.
+            //
+            // The window no longer offers fuel at all, so nothing can reach past vanilla's own
+            // guard today. The cap stays as a guard on the renderer's invariant: the coal bed
+            // height is only drawn for levels this small.
+            World.SetBlock("game:forge", ForgePos);
+            await Ticks(2);
+
+            var be = Forge;
+            var hand = new DummySlot(World.Stack("game:coke", 64));
+            hand.TryPutInto(Sapi.World, be.FuelSlot, 64);
+
+            Assert.LessOrEqual(be.FuelSlot.StackSize, ItemSlotForgeFuel.MaxFuel,
+                "the fuel slot holds no more than the coal bed is drawn for");
+            Assert.Greater(hand.StackSize, 0, "and the rest stays in hand");
+
+            // The lift that caused it, at the capped level: a voxel or so, not a block.
+            float lift = (be.FuelLevel - 1) / 16f / 4f;
+            Assert.Less(lift, 0.1f, $"coal bed rises {lift:0.00} blocks, which should be barely visible");
+        }
+
+        [VsTest(TimeoutMs = 90000), RequiresClient]
+        public async Task TheWindowOffersNoFuelSlot()
+        {
+            // Fuel goes on a forge the way it always has, by shift-clicking coal onto it. Offering
+            // a second way to do it in here made the window the odd one out, and it was the only
+            // thing that could take fuel back off a lit forge.
+            var be = await EmptyHandedAtAForge();
+            be.WorkItemSlot.Itemstack = World.Stack("game:crucible-brown-fired");
+            be.MarkDirty(true);
+            await Ticks(2);
+
+            await Interact.UseBlock(ForgePos, BlockFacing.UP);
+            var dlg = await Gui.WaitFor<GuiDialogCrucibleForge>(120);
+
+            await OnClient();
+            bool hasFuel = dlg.SingleComposer.GetSlotGrid("fuelSlot") != null;
+            bool hasCrucible = dlg.SingleComposer.GetSlotGrid("crucibleSlot") != null;
+            bool hasCharge = dlg.SingleComposer.GetSlotGrid("chargeSlots") != null;
+            await OnServer();
+
+            Assert.False(hasFuel, "no fuel slot in the crucible window");
+            Assert.True(hasCrucible, "the crucible slot is still there");
+            Assert.True(hasCharge, "and the charge slots");
+
+            await Input.Press(GlKeys.Escape);
+            await Gui.WaitGone<GuiDialogCrucibleForge>(120);
+        }
+
+        [VsTest(TimeoutMs = 120000), RequiresClient]
+        public async Task TheWindowKeepsUpAsTheCrucibleCools()
+        {
+            // The temperature used to freeze at whatever it read when the fire went out. The tick
+            // decided whether to sync by comparing a reading taken before HeatCrucible with the one
+            // it returned - but GetTemperature performs the cooling as a side effect of being
+            // called, so the two readings always matched and clients were never told anything.
+            var be = await EmptyHandedAtAForge();
+            be.FuelSlot.Itemstack = null;
+            var crucible = World.Stack("game:crucible-brown-fired");
+            be.WorkItemSlot.Itemstack = crucible;
+            be.AddCharge(new DummySlot(World.Stack("game:nugget-nativecopper", 20)), 20);
+            crucible.Collectible.SetTemperature(Sapi.World, crucible, 1100);
+            be.MarkDirty(true);
+            await Ticks(2);
+
+            await Interact.UseBlock(ForgePos, BlockFacing.UP);
+            var dlg = await Gui.WaitFor<GuiDialogCrucibleForge>(120);
+
+            await OnClient();
+            string first = dlg.SingleComposer.GetDynamicText("crucibleTemp").GetText();
+            await OnServer();
+
+            // Past the half in-game hour of cooldown delay that every heat gain buys, then far
+            // enough for whole degrees to move.
+            for (int i = 0; i < 16; i++)
+            {
+                await Hours(0.05);
+                await Ticks(10);
+            }
+
+            await OnClient();
+            string later = dlg.SingleComposer.GetDynamicText("crucibleTemp").GetText();
+            await OnServer();
+
+            Log($"  window read {first}, then {later}");
+            Assert.NotEqual(first, later, "the open window must follow the crucible down");
+
+            await Input.Press(GlKeys.Escape);
+            await Gui.WaitGone<GuiDialogCrucibleForge>(120);
+        }
+
         [VsTest(TimeoutMs = 90000), RequiresClient]
         public async Task TheWindowRefusesThingsTheCrucibleCannotMelt()
         {
@@ -317,6 +416,88 @@ namespace Crucibulum.Tests
             Assert.False(ItemSlotForgeWorkItem.Accepts(World.Stack("game:stick")), "a stick does not");
 
             await Task.CompletedTask;
+        }
+
+        [VsTest(TimeoutMs = 120000), RequiresClient]
+        public async Task TheWindowSaysWhatTemperatureTheChargeNeeds()
+        {
+            // Asserted on the drawn string, not the attribute behind it: the number reaching the
+            // window is only half the job, and the half a player sees is the other one.
+            var be = await EmptyHandedAtAForge();
+            be.WorkItemSlot.Itemstack = World.Stack("game:crucible-brown-fired");
+            be.AddCharge(new DummySlot(World.Stack("game:nugget-nativecopper", 20)), 20);
+            be.WorkItemStack.Collectible.SetTemperature(Sapi.World, be.WorkItemStack, 900f);
+            be.MarkDirty(true);
+            await Ticks(30);
+
+            await Interact.UseBlock(ForgePos, BlockFacing.UP);
+            var dlg = await Gui.WaitFor<GuiDialogCrucibleForge>(120);
+
+            await OnClient();
+            string shown = dlg.SingleComposer.GetDynamicText("crucibleTemp").GetText();
+            await OnServer();
+
+            Log($"  window temperature line: {shown}");
+            Assert.Contains(shown, "1084", "the window says what it is climbing towards");
+
+            await Input.Press(GlKeys.Escape);
+            await Gui.WaitGone<GuiDialogCrucibleForge>(120);
+        }
+
+        [VsTest(TimeoutMs = 120000), RequiresClient]
+        public async Task TheWindowClosesWhenTheCrucibleLeavesTheForge()
+        {
+            // The window is the crucible's, so an empty forge should not be left showing one.
+            var be = await EmptyHandedAtAForge();
+            be.WorkItemSlot.Itemstack = World.Stack("game:crucible-brown-fired");
+            be.AddCharge(new DummySlot(World.Stack("game:nugget-nativecopper", 20)), 20);
+            be.MarkDirty(true);
+            await Ticks(4);
+
+            await Interact.UseBlock(ForgePos, BlockFacing.UP);
+            await Gui.WaitFor<GuiDialogCrucibleForge>(120);
+
+            be.WorkItemSlot.Itemstack = null;
+            be.MarkDirty(true);
+
+            await Gui.WaitGone<GuiDialogCrucibleForge>(240);
+        }
+
+        [VsTest(TimeoutMs = 120000), RequiresClient]
+        public async Task TheWindowStaysOpenWhileTheCrucibleIsOnTheCursor()
+        {
+            // Lifting the crucible out of its slot empties the slot a moment before the crucible
+            // has gone anywhere - it is riding the mouse cursor. Closing on that would take the
+            // drag with it, so the window waits until the cursor is empty again.
+            var be = await EmptyHandedAtAForge();
+            be.WorkItemSlot.Itemstack = World.Stack("game:crucible-brown-fired");
+            be.MarkDirty(true);
+            await Ticks(4);
+
+            await Interact.UseBlock(ForgePos, BlockFacing.UP);
+            await Gui.WaitFor<GuiDialogCrucibleForge>(120);
+
+            await OnClient();
+            var mouse = Capi.World.Player.InventoryManager.MouseItemSlot;
+            mouse.Itemstack = new ItemStack(Capi.World.GetBlock(new AssetLocation("game:crucible-brown-fired")));
+            mouse.MarkDirty();
+            await OnServer();
+
+            be.WorkItemSlot.Itemstack = null;
+            be.MarkDirty(true);
+            await Ticks(20);
+
+            string[] open = await Gui.OpenDialogs();
+            Assert.True(open.Any(d => d.Contains("CrucibleForge")),
+                "the window stayed open while the crucible was still on the cursor; open: " + string.Join(", ", open));
+
+            // Put it down; now it may go.
+            await OnClient();
+            Capi.World.Player.InventoryManager.MouseItemSlot.Itemstack = null;
+            Capi.World.Player.InventoryManager.MouseItemSlot.MarkDirty();
+            await OnServer();
+
+            await Gui.WaitGone<GuiDialogCrucibleForge>(240);
         }
     }
 }

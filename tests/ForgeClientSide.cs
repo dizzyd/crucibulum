@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Threading.Tasks;
 using Crucibulum;
 using Vintagestory.API.Common;
@@ -76,23 +77,6 @@ namespace Crucibulum.Tests
         }
 
         [VsTest(TimeoutMs = 90000), RequiresClient]
-        public async Task ShiftRightClickLoadsOreIntoTheCrucible()
-        {
-            var be = await AForge();
-            be.WorkItemSlot.Itemstack = World.Stack(Crucible);
-            be.MarkDirty(true);
-            await Ticks(2);
-
-            await Player.Hold("game:nugget-nativecopper", 8);
-            await Ticks(2);
-
-            await TestSneak.Click(ForgePos, BlockFacing.UP);
-
-            Assert.Equal(1, Forge.ChargeSlots[0].StackSize, "one nugget went in per click");
-            Assert.Equal(7, Player.Held.StackSize, "the rest stayed in hand");
-        }
-
-        [VsTest(TimeoutMs = 90000), RequiresClient]
         public async Task ShiftRightClickStillFuelsTheForge()
         {
             // Vanilla's own path, through our block class. Coal ore is GroundStorable, so this is
@@ -158,21 +142,6 @@ namespace Crucibulum.Tests
             Assert.Equal(1, Forge.WorkItemStack.StackSize, "exactly one");
         }
 
-        [VsTest(TimeoutMs = 90000), RequiresClient]
-        public async Task ShiftRightClickHandsBackALooseCharge()
-        {
-            var be = await AForge();
-            be.AddCharge(new DummySlot(World.Stack("game:nugget-nativecopper", 4)), 4);
-            be.MarkDirty(true);
-            await Ticks(2);
-            await EmptyPockets();
-
-            await TestSneak.Click(ForgePos, BlockFacing.UP);
-
-            Assert.True(Forge.ChargeEmpty, "the charge came back out");
-            Assert.Equal(4, OnPlayer("nugget-nativecopper"), "and is in the player's inventory");
-        }
-
         /// <summary>
         /// Hotbar and backpack only: the creative inventory throws from its own Count getter when
         /// enumerated server-side, and TryGiveItemstack never puts anything there anyway.
@@ -215,6 +184,50 @@ namespace Crucibulum.Tests
 
             Assert.NotNull(Forge.WorkItemStack, "the molten crucible is still there after rendering");
             await Shot.Take("/tmp/crucibulum-molten.png");
+        }
+
+        [VsTest(TimeoutMs = 90000), RequiresClient]
+        public async Task TheInteractionHelpOffersOnlyWhatShiftActuallyDoes()
+        {
+            // The floating help is built client-side and filtered per-forge, so it is asserted the
+            // way the HUD builds it rather than read off a screenshot.
+            //
+            // It used to advertise three more shift-clicks - add one, add a stack, take the loose
+            // charge - and shift-click with an empty hand takes the crucible, so the line the help
+            // showed was not the line that ran. Loading the charge is the window's job now, and the
+            // help says nothing about it.
+            await AForge();
+            var be = Forge;
+            be.WorkItemSlot.Itemstack = World.Stack(Crucible);
+            be.AddCharge(new DummySlot(World.Stack("game:nugget-nativecopper", 20)), 20);
+            be.MarkDirty(true);
+
+            // The help is filtered against the *client's* copy of the block entity, so this has to
+            // wait for the sync rather than for the server to be ready. Comfortably past the soft
+            // sync throttle - a few ticks is not enough, and the entries simply read as absent.
+            await Ticks(30);
+
+            await OnClient();
+            var block = Capi.World.BlockAccessor.GetBlock(ForgePos);
+            var sel = new BlockSelection { Position = ForgePos, Face = BlockFacing.UP };
+            var help = block.GetPlacedBlockInteractionHelp(Capi.World, sel, Capi.World.Player);
+
+            var shown = help
+                .Where(wi => wi.GetMatchingStacks == null || wi.GetMatchingStacks(wi, sel, null) != null)
+                .Select(wi => wi.ActionLangCode)
+                .ToArray();
+            await OnServer();
+
+            Log("  help shown: " + string.Join(", ", shown));
+
+            foreach (string code in shown)
+            {
+                Assert.False(code.Contains("charge"),
+                    $"the help still offers a charge interaction that no longer exists: {code}");
+            }
+
+            Assert.True(shown.Contains("crucibulum:blockhelp-forge-takecrucible"), "shift still takes the crucible");
+            Assert.True(shown.Contains("crucibulum:blockhelp-forge-opencrucible"), "and a plain click opens the window");
         }
     }
 }

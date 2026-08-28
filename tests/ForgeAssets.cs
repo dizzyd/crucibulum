@@ -30,15 +30,9 @@ namespace Crucibulum.Tests
             "crucibulum:forge-alloy-part",
             "crucibulum:dlg-empty",
             "crucibulum:dlg-nocrucible",
-            "crucibulum:dlg-nofuel",
-            "crucibulum:dlg-unlit",
-            "crucibulum:dlg-fuelhours",
             "crucibulum:blockhelp-forge-addcrucible",
             "crucibulum:blockhelp-forge-takecrucible",
             "crucibulum:blockhelp-forge-opencrucible",
-            "crucibulum:blockhelp-forge-addcharge",
-            "crucibulum:blockhelp-forge-addchargestack",
-            "crucibulum:blockhelp-forge-takecharge",
         };
 
         [VsTest]

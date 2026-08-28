@@ -3,6 +3,8 @@ using System.Threading.Tasks;
 using Crucibulum;
 using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
+using Vintagestory.GameContent;
+using Vintagestory.API.Datastructures;
 using VsTestkit.Testing;
 using static VsTestkit.Testing.Vs;
 
@@ -11,9 +13,9 @@ namespace Crucibulum.Tests
     /// <summary>
     /// The block info readout.
     ///
-    /// The forge has no GUI, so this text is the entire interface to what is in the crucible. It
-    /// has to carry what the firepit's dialog carries - contents and yield - and one thing that
-    /// dialog does not: vanilla's GetOutputText returns null for a mix that matches no alloy, which
+    /// This is the readout you get without opening anything, and it has to stand on its own: the
+    /// common case is meant not to need the window at all. It carries what the firepit's dialog
+    /// carries - contents and yield - and one thing that dialog does not: vanilla's GetOutputText returns null for a mix that matches no alloy, which
     /// on its own is indistinguishable from a mix that does. A player staring at a silent crucible
     /// has no way to tell "wrong ratio" from "correct, just cold".
     /// </summary>
@@ -115,6 +117,44 @@ namespace Crucibulum.Tests
 
             Assert.Contains(text, "1084", "copper's melting point");
             Assert.Contains(text, "1000", "what lignite can actually reach");
+        }
+
+        [VsTest]
+        public async Task TheReadoutSaysWhatTemperatureItIsWaitingFor()
+        {
+            // Watching a number climb with no idea what it is climbing towards was the complaint.
+            // Copper melts at 1084, so that is what both readouts should quote.
+            string info = await Readout(("game:nugget-nativecopper", 20));
+            Log("  block info: " + info.Replace("\n", " | ").Trim());
+            Assert.Contains(info, "1084", "the block info names the melting point");
+
+            var tree = new TreeAttribute();
+            Forge.SetDialogValues(tree);
+            Assert.Close(1084f, tree.GetFloat("meltingPoint"), 1f, "and the window is told it too");
+        }
+
+        [VsTest]
+        public async Task TheTargetGoesAwayOnceTheMetalIsMolten()
+        {
+            // Once it is liquid the bar says how far along it is and the threshold has stopped
+            // being the question, so the window is told zero rather than a number to display.
+            World.SetBlock("game:air", ForgePos);
+            await Ticks(1);
+            World.SetBlock("game:forge", ForgePos);
+            await Ticks(2);
+
+            var be = Forge;
+            var smelted = (BlockSmeltedContainer)Sapi.World.GetBlock(new AssetLocation("game:crucible-brown-smelted"));
+            var stack = new ItemStack(smelted);
+            smelted.SetContents(stack, World.Stack("game:ingot-copper"), 200);
+            be.WorkItemSlot.Itemstack = stack;
+            stack.Collectible.SetTemperature(Sapi.World, stack, 1150);
+            be.MarkDirty(true);
+            await Ticks(2);
+
+            var tree = new TreeAttribute();
+            be.SetDialogValues(tree);
+            Assert.Close(0f, tree.GetFloat("meltingPoint"), 0.01f, "no target once it is molten");
         }
     }
 }

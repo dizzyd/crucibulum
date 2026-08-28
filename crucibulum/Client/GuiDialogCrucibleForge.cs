@@ -12,10 +12,13 @@ namespace Crucibulum;
 /// The forge's crucible window.
 ///
 /// Laid out like the firepit's, because that is the one every player already knows: the four
-/// ingredient slots across the top, the crucible below them, fuel below that, and a progress
-/// arrow between the crucible and what it will pour. What the firepit does not show, and this
-/// does, is the blend — each metal's share of the melt, on the same measure alloy recipes are
-/// written in, and the ratio to aim for when the mix is wrong.
+/// ingredient slots across the top and the crucible below them. What the firepit does not show,
+/// and this does, is the blend — each metal's share of the melt, on the same measure alloy
+/// recipes are written in, and the ratio to aim for when the mix is wrong.
+///
+/// No fuel slot. The forge is fuelled the way a forge has always been fuelled, by shift-clicking
+/// coal onto it, and this window is only about what goes in the crucible. Putting fuel here as
+/// well meant two different ways to do the one job, and it was the odd one out.
 /// </summary>
 public class GuiDialogCrucibleForge : GuiDialogBlockEntity
 {
@@ -23,6 +26,7 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
     private EnumPosFlag screenPos;
     private string currentStatus = "";
     private bool wasMelting;
+    private bool closing;
 
     private ElementBounds chargeSlotBounds;
     private ElementBounds meltBarBounds;
@@ -38,6 +42,33 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
 
         tree.OnModified.Add(new TreeModifiedListener { listener = OnAttributesModified });
         Attributes = tree;
+    }
+
+    /// <summary>
+    /// The window belongs to the crucible. Take the crucible away - out through the slot, by
+    /// shift-clicking it off the forge, or by breaking the forge - and there is nothing left for
+    /// the window to be about, so it closes rather than sitting open over an empty slot.
+    ///
+    /// Checked per frame rather than off the slot event, because it has to survive a drag. The
+    /// instant a crucible is lifted out of the slot it is riding the mouse cursor and the slot is
+    /// already empty; closing right then would take the drag down with it and drop the crucible
+    /// wherever a closing window puts things. Waiting until the cursor is empty again means the
+    /// window goes once the crucible has actually been put somewhere.
+    /// </summary>
+    private void CloseIfTheCrucibleHasGone()
+    {
+        if (closing || !IsOpened() || Inventory == null) return;
+        if (!Inventory[0].Empty) return;
+        if (capi.World.Player?.InventoryManager?.MouseItemSlot?.Empty == false) return;
+
+        closing = true;
+        capi.Event.EnqueueMainThreadTask(() => TryClose(), "closecrucibleforgedlg");
+    }
+
+    public override void OnRenderGUI(float deltaTime)
+    {
+        base.OnRenderGUI(deltaTime);
+        CloseIfTheCrucibleHasGone();
     }
 
     private void OnInventorySlotModified(int slotid)
@@ -66,7 +97,10 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
 
         CairoFont statusFont = CairoFont.WhiteDetailText();
 
-        chargeSlotBounds = ElementStdBounds.SlotGrid(EnumDialogArea.None, 0, 8, 4, 1);
+        // 24, not 0: the title bar is drawn into the top of the child area, so a slot row placed
+        // near the origin butts straight up against it. The firepit starts its first row at 30 for
+        // the same reason; this is a little tighter now that there is no heading to sit between.
+        chargeSlotBounds = ElementStdBounds.SlotGrid(EnumDialogArea.None, 0, 24, 4, 1);
 
         // The status block is measured rather than given a fixed height. One line for a plain melt,
         // three for a mix that will not combine - reserving room for the worst case left a hole
@@ -88,12 +122,7 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
 
         meltBarBounds = ElementBounds.Fixed(rowLabelX, crucibleY + 32, panelWidth - rowLabelX, 10);
 
-        double fuelY = crucibleY + slotSize + gap;
-        ElementBounds fuelBounds = ElementStdBounds.SlotGrid(EnumDialogArea.None, 0, fuelY, 1, 1);
-        ElementBounds fuelTextBounds = ElementBounds.Fixed(
-            rowLabelX, fuelY + (slotSize - 24) / 2, panelWidth - rowLabelX, 24);
-
-        ElementBounds panelBounds = ElementBounds.Fixed(0, 0, panelWidth, fuelY + slotSize);
+        ElementBounds panelBounds = ElementBounds.Fixed(0, 0, panelWidth, crucibleY + slotSize);
 
         ElementBounds bgBounds = ElementBounds.Fill.WithFixedPadding(GuiStyle.ElementToDialogPadding);
         bgBounds.BothSizing = ElementSizing.FitToChildren;
@@ -124,9 +153,6 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
 
                 .AddItemSlotGrid(Inventory, SendInvPacket, 1, new[] { 0 }, crucibleBounds, "crucibleSlot")
                 .AddDynamicText("", CairoFont.WhiteDetailText(), crucibleTempBounds, "crucibleTemp")
-
-                .AddItemSlotGrid(Inventory, SendInvPacket, 1, new[] { 1 }, fuelBounds, "fuelSlot")
-                .AddDynamicText("", CairoFont.WhiteDetailText(), fuelTextBounds, "fuelText")
             .EndChildElements()
             .Compose();
 
@@ -148,16 +174,16 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
         string tempText = !haveCrucible ? ""
             : temp <= 20 ? Lang.Get("Cold")
             : $"{temp:#}°C";
-        SingleComposer.GetDynamicText("crucibleTemp").SetNewText(tempText);
 
-        float hours = Attributes.GetFloat("fuelHours");
-        bool burning = Attributes.GetInt("burning") > 0;
-        string fuelText = Attributes.GetFloat("fuelLevel") <= 0
-            ? Lang.Get("crucibulum:dlg-nofuel")
-            : burning
-                ? Lang.Get("crucibulum:dlg-fuelhours", hours.ToString("0.#"))
-                : Lang.Get("crucibulum:dlg-unlit");
-        SingleComposer.GetDynamicText("fuelText").SetNewText(fuelText);
+        // What it is climbing towards. Only while it is still below: once the metal is going, the
+        // bar underneath says how far along it is and the threshold has stopped mattering.
+        float meltingPoint = Attributes.GetFloat("meltingPoint");
+        if (haveCrucible && meltingPoint > 0 && temp < meltingPoint)
+        {
+            tempText = Lang.Get("crucibulum:dlg-meltsat", tempText, (int)meltingPoint);
+        }
+
+        SingleComposer.GetDynamicText("crucibleTemp").SetNewText(tempText);
 
         // The status text and the melt bar both change the height of the window, so a change in
         // either has to lay it out again rather than just re-letter it in place.
@@ -178,7 +204,6 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
         }
     }
 
-    /// <summary>The flame under the fuel slot, and the melt arrow beside the crucible.</summary>
     /// <summary>
     /// The melt bar under the crucible's temperature. Drawn rather than composed so it can simply
     /// not be there when there is nothing melting, instead of sitting empty and looking stuck.
@@ -225,6 +250,7 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
     public override void OnGuiOpened()
     {
         base.OnGuiOpened();
+        closing = false;
         Inventory.SlotModified += OnInventorySlotModified;
 
         screenPos = GetFreePos("smallblockgui");
@@ -238,7 +264,6 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
 
         SingleComposer.GetSlotGrid("chargeSlots")?.OnGuiClosed(capi);
         SingleComposer.GetSlotGrid("crucibleSlot")?.OnGuiClosed(capi);
-        SingleComposer.GetSlotGrid("fuelSlot")?.OnGuiClosed(capi);
 
         FreePos("smallblockgui", screenPos);
         base.OnGuiClosed();

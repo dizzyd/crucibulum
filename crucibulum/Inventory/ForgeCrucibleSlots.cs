@@ -38,7 +38,24 @@ public class ItemSlotForgeWorkItem : ItemSlotSurvival
 /// <summary>Fuel the forge will actually burn: vanilla's rule is a burn temperature over 1000.</summary>
 public class ItemSlotForgeFuel : ItemSlotSurvival
 {
-    public ItemSlotForgeFuel(InventoryBase inventory) : base(inventory) { }
+    /// <summary>
+    /// How deep the forge's coal bed goes.
+    ///
+    /// The forge draws its coal, and everything sitting on it, at
+    /// <c>y + (fuelLevel - 1) / 64</c> blocks - the bed rises as it fills. Vanilla keeps that in
+    /// range by refusing fuel once the level is over 4.5, but that guard lives in the shift-click
+    /// path, not in the slot, so a window that exposes the slot lets a whole stack of 64 in and
+    /// lifts the coals and the crucible a full block into the air above the forge.
+    ///
+    /// Six is what vanilla can actually reach: it will take one more whenever the level has burnt
+    /// down to 4.5 or less.
+    /// </summary>
+    public const int MaxFuel = 6;
+
+    public ItemSlotForgeFuel(InventoryBase inventory) : base(inventory)
+    {
+        MaxSlotStackSize = MaxFuel;
+    }
 
     public override bool CanHold(ItemSlot sourceSlot)
     {

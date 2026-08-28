@@ -16,8 +16,9 @@ namespace Crucibulum.Tests
     /// firepit holds it: a crucible carried off with ore in it would be invisible to the firepit,
     /// which reads its ingredients from whatever heat source is holding it.
     ///
-    /// These drive AddCharge/TakeCharge directly rather than through a click, so they run headless.
-    /// ForgeClientSide covers the click itself, which is where the interesting routing question is.
+    /// These drive AddCharge/TakeCharge directly, so they run headless. Both are still the
+    /// programmatic way in, but a player no longer reaches either by clicking: shift is the
+    /// crucible itself now, and loading the charge is the window's job.
     /// </summary>
     public class ForgeCharging
     {
@@ -63,12 +64,12 @@ namespace Crucibulum.Tests
         }
 
         [VsTest]
-        public async Task CtrlMovesTheWholeStack()
+        public async Task AWholeStackCanGoInAtOnce()
         {
             var be = await PlaceForge();
             var hand = Holding(CopperNugget, 8);
 
-            Assert.Equal(8, be.AddCharge(hand, hand.StackSize), "nuggets moved by shift+ctrl");
+            Assert.Equal(8, be.AddCharge(hand, hand.StackSize), "the whole stack moved");
             Assert.True(hand.Empty, "the hand emptied");
         }
 
@@ -128,6 +129,37 @@ namespace Crucibulum.Tests
 
             Assert.Equal(20, be.AddCharge(Holding(CopperNugget, 20), 20), "a warm crucible still takes ore");
             Assert.Equal(40, Forge.ChargeSlots[0].StackSize, "and it lands in the slot already holding some");
+        }
+
+        [VsTest]
+        public async Task ColdOreDroppedStraightIntoASlotAlsoCoolsTheMelt()
+        {
+            // The window puts metal into the charge slots through the ordinary inventory
+            // machinery, never through AddCharge - so for a while this path skipped the cooling
+            // penalty that shift-clicking paid, and a crucible could be topped up for free by
+            // opening the window instead. The settling now happens on the tick, so every route in
+            // pays it.
+            var be = await PlaceForge();
+            be.AddCharge(Holding(CopperNugget, 20), 20);
+            be.WorkItemStack.Collectible.SetTemperature(Sapi.World, be.WorkItemStack, 1000f);
+            be.ChargeSlots[0].Itemstack.Collectible.SetTemperature(Sapi.World, be.ChargeSlots[0].Itemstack, 1000f);
+
+            // One firing to take the baseline. The settling is a delta - it fires on metal
+            // arriving, not on metal merely being present - so it needs a "before" to compare to.
+            await World.TickNow(ForgePos);
+
+            // Exactly what a drag into the window does: straight into the slot, at hand temperature.
+            var cold = World.Stack(CopperNugget, 60);
+            cold.Collectible.SetTemperature(Sapi.World, cold, 20f);
+            be.ChargeSlots[1].Itemstack = cold;
+            be.MarkDirty(true);
+
+            await World.TickNow(ForgePos);
+
+            float after = Forge.WorkItemStack.Collectible.GetTemperature(Sapi.World, Forge.WorkItemStack);
+            Log($"  crucible 1000 degC + 60 cold nuggets dropped in -> {after:0} degC");
+            Assert.Less(after, 1000f, "the crucible cooled");
+            Assert.Greater(after, 20f, "but not all the way to the ore's temperature");
         }
 
         [VsTest]
