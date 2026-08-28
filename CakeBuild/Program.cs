@@ -1,10 +1,7 @@
-// Fornax - a mid-game multi-block updraft kiln for Vintage Story
-// Copyright (C) 2026 Dave (Dizzy) Smith
+// Crucibulum - melt metal in a crucible on the forge, for Vintage Story
+// Copyright (c) 2026 Dave (Dizzy) Smith
 //
-// This program is free software: you can redistribute it and/or modify it under
-// the terms of the GNU Lesser General Public License as published by the Free
-// Software Foundation, either version 3 of the License, or (at your option) any
-// later version. See COPYING.LESSER, or <https://www.gnu.org/licenses/>.
+// Released under the MIT License. See LICENSE.
 
 using System;
 using System.IO;
@@ -119,6 +116,12 @@ public sealed class PackageTask : FrostingTask<BuildContext>
         if (context.FileExists($"../{BuildContext.ProjectName}/modicon.png"))
         {
             context.CopyFile($"../{BuildContext.ProjectName}/modicon.png", $"../Releases/{context.Name}/modicon.png");
+        }
+
+        // The zip is what gets redistributed, so the licence travels with it.
+        if (context.FileExists("../LICENSE"))
+        {
+            context.CopyFile("../LICENSE", $"../Releases/{context.Name}/LICENSE");
         }
 
         context.Zip($"../Releases/{context.Name}", $"../Releases/{context.Name}_{context.Version}.zip");

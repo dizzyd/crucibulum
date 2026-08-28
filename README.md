@@ -341,4 +341,4 @@ untested. A bellows is simulated by setting the oxygen rate rather than by placi
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
