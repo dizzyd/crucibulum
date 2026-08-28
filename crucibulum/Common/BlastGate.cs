@@ -1,0 +1,70 @@
+// Crucibulum - melt metal in a crucible on the forge, for Vintage Story
+// Copyright (C) 2026 Dave (Dizzy) Smith
+//
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU Lesser General Public License as published by the Free
+// Software Foundation, either version 3 of the License, or (at your option) any
+// later version. See COPYING.LESSER, or <https://www.gnu.org/licenses/>.
+
+namespace Crucibulum;
+
+/// <summary>
+/// How far the forge's air inlet is open.
+///
+/// A forge is not set to a temperature, it is given air, and it settles wherever the fuel and the
+/// draught put it. Vanilla already models that: the ceiling is
+/// <c>MaxTemperature * (1 + extraOxygenRate)</c>, and a bellows drives the multiplier up to about
+/// 1.64. A gate is the same lever below one, so the whole mechanic is vanilla's own, extended
+/// downwards rather than invented.
+///
+/// The player never picks a temperature. They move a plate, and the readout says where the fire
+/// ends up.
+/// </summary>
+public enum GatePosition
+{
+    Open = 0,
+    Half = 1,
+    Quarter = 2,
+    Shut = 3,
+}
+
+public static class BlastGate
+{
+    /// <summary>
+    /// How far the plate slides aside, in voxels, to uncover the inlet completely. Five, because the
+    /// plate starts at x 5.5 and the block ends at 16 - any further and it hangs off the forge.
+    /// </summary>
+    public const float FullSlide = 5f;
+
+    public const int Positions = 4;
+
+    /// <summary>
+    /// What each position does to the fire's ceiling. Shut is not airtight - a banked forge still
+    /// burns, it just cannot get near forging heat - so the range stops well short of zero.
+    /// </summary>
+    public static float AirFactor(GatePosition position) => position switch
+    {
+        GatePosition.Open => 1.00f,
+        GatePosition.Half => 0.85f,
+        GatePosition.Quarter => 0.70f,
+        _ => 0.55f,
+    };
+
+    /// <summary>
+    /// How far the plate has been drawn back, in blocks. This is the whole readout: shut covers the
+    /// inlet, open leaves it black and open, and you can see which from across the workshop.
+    /// </summary>
+    public static float Slide(GatePosition position) =>
+        FullSlide / 16f * ((Positions - 1 - (int)position) / (float)(Positions - 1));
+
+    public static GatePosition Next(GatePosition position) =>
+        (GatePosition)(((int)position + 1) % Positions);
+
+    public static string LangKey(GatePosition position) => position switch
+    {
+        GatePosition.Open => "crucibulum:gate-open",
+        GatePosition.Half => "crucibulum:gate-half",
+        GatePosition.Quarter => "crucibulum:gate-quarter",
+        _ => "crucibulum:gate-shut",
+    };
+}

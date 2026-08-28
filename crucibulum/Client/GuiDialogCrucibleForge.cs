@@ -35,6 +35,8 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
     private string currentStatus = "";
     private bool wasMelting;
     private bool closing;
+    private string currentGate = "";
+    private bool sawCrucible;
 
     private ElementBounds chargeSlotBounds;
     private ElementBounds meltBarBounds;
@@ -66,7 +68,17 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
     private void CloseIfTheCrucibleHasGone()
     {
         if (closing || !IsOpened() || Inventory == null) return;
-        if (!Inventory[0].Empty) return;
+
+        // "The crucible left", not "there is no crucible". The window is opened by the server, and
+        // the client's copy of the inventory can arrive a moment later - closing on that gap shuts
+        // the window the instant it opens, which it did, intermittently.
+        if (!Inventory[0].Empty)
+        {
+            sawCrucible = true;
+            return;
+        }
+
+        if (!sawCrucible) return;
         if (capi.World.Player?.InventoryManager?.MouseItemSlot?.Empty == false) return;
 
         closing = true;
@@ -77,6 +89,17 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
     {
         base.OnRenderGUI(deltaTime);
         CloseIfTheCrucibleHasGone();
+    }
+
+    /// <summary>What the gate is doing, as a thing you press rather than a number you set.</summary>
+    private string GateLabel() => Lang.Get("crucibulum:gate-button",
+        Lang.Get(Attributes.GetString("gatePositionKey", "crucibulum:gate-open")),
+        Attributes.GetInt("gateCeiling"));
+
+    private bool OnGateClicked()
+    {
+        capi.Network.SendBlockEntityPacket(BlockEntityPosition, BlockEntityCrucibulumForge.CycleGatePacketId, null);
+        return true;
     }
 
     private void OnInventorySlotModified(int slotid)
@@ -130,7 +153,15 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
 
         meltBarBounds = ElementBounds.Fixed(rowLabelX, crucibleY + 32, panelWidth - rowLabelX, 10);
 
-        ElementBounds panelBounds = ElementBounds.Fixed(0, 0, panelWidth, crucibleY + slotSize);
+        // The gate row, only for a forge that has one. A forge holding a crucible opens this window
+        // on a click, so the click that works the gate on a bare forge cannot be used here - this
+        // is the way to reach it without taking the crucible out first.
+        bool haveGate = Attributes.GetInt("haveGate") > 0;
+        double gateY = crucibleY + slotSize + gap;
+        ElementBounds gateBounds = ElementBounds.Fixed(0, gateY, panelWidth, 28);
+
+        ElementBounds panelBounds = ElementBounds.Fixed(0, 0, panelWidth,
+            haveGate ? gateY + 28 : crucibleY + slotSize);
 
         ElementBounds bgBounds = ElementBounds.Fill.WithFixedPadding(GuiStyle.ElementToDialogPadding);
         bgBounds.BothSizing = ElementSizing.FitToChildren;
@@ -161,6 +192,10 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
 
                 .AddItemSlotGrid(Inventory, SendInvPacket, 1, new[] { 0 }, crucibleBounds, "crucibleSlot")
                 .AddDynamicText("", CairoFont.WhiteDetailText(), crucibleTempBounds, "crucibleTemp")
+
+                .AddIf(haveGate)
+                    .AddSmallButton(GateLabel(), OnGateClicked, gateBounds, EnumButtonStyle.Normal, "gateButton")
+                .EndIf()
             .EndChildElements()
             .Compose();
 
@@ -193,14 +228,21 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
 
         SingleComposer.GetDynamicText("crucibleTemp").SetNewText(tempText);
 
+
         // The status text and the melt bar both change the height of the window, so a change in
         // either has to lay it out again rather than just re-letter it in place.
         string status = Attributes.GetString("statusText", "");
         bool melting = Attributes.GetFloat("maxMeltTime", 0) > 0 && Attributes.GetFloat("meltProgress", 0) > 0;
-        if (status != currentStatus || melting != wasMelting)
+
+        // The gate's label is drawn into the button's texture when it is composed, so moving the
+        // gate means laying the window out again rather than re-lettering it in place.
+        string gate = GateLabel();
+
+        if (status != currentStatus || melting != wasMelting || gate != currentGate)
         {
             currentStatus = status;
             wasMelting = melting;
+            currentGate = gate;
             capi.Event.EnqueueMainThreadTask(SetupDialog, "setupcrucibleforgedlg");
             return;
         }
@@ -259,6 +301,7 @@ public class GuiDialogCrucibleForge : GuiDialogBlockEntity
     {
         base.OnGuiOpened();
         closing = false;
+        sawCrucible = false;
         Inventory.SlotModified += OnInventorySlotModified;
 
         screenPos = GetFreePos("smallblockgui");

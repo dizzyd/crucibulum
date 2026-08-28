@@ -78,4 +78,11 @@ public class CrucibulumConfig
     /// about two minutes; raise it to heat faster.
     /// </summary>
     public float HeatRate = 0.5f;
+
+    /// <summary>
+    /// Whether a forge can be fitted with a blast gate at all. Turning this off leaves every forge
+    /// on full draught, which is vanilla's behaviour; gates already fitted stop throttling and can
+    /// still be taken back out.
+    /// </summary>
+    public bool EnableBlastGate = true;
 }

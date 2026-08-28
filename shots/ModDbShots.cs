@@ -269,4 +269,31 @@ public class ModDbShots
         await HideHud("CrucibleForge");
         Log("07 -> " + await Shot.Take(Out("07-icon-source.png")));
     }
+
+    [VsTest(TimeoutMs = 180000), RequiresClient]
+    public async Task Shot06_TheBlastGate()
+    {
+        await World.SetCalendarTo(500 * 24 + 11);
+
+        // Four forges, one per gate position, so the whole range reads left to right.
+        var positions = new[] { GatePosition.Shut, GatePosition.Quarter, GatePosition.Half, GatePosition.Open };
+        BlockPos first = P(16, 1, 20);
+        ClearAround(first, 40);
+
+        for (int i = 0; i < positions.Length; i++)
+        {
+            BlockPos f = first.AddCopy(i * 2, 0, 0);
+            var be = Forge_(f);
+            be.MeshAngleRad = 0;                     // all square on, so the four read as one row
+            be.FitGateForTesting(World.Stack("game:metalplate-copper"), positions[i]);
+            be.FuelSlot.Itemstack = World.Stack("game:coke", 4);
+            be.TryIgnite();
+            be.MarkDirty(true);
+        }
+        await Ticks(20);
+
+        await Aim(new Vec3d(first.X + 3.5, first.Y + 1.15, first.Z + 3.4), new Vec3d(first.X + 3.5, first.Y + 0.35, first.Z + 0.5), 30);
+        await Frames.Wait(30);
+        Log("06 -> " + await Shot.Take(Out("06-blast-gate.png")));
+    }
 }

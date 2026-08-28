@@ -26,6 +26,31 @@ being left open over an empty slot.
 Ore and ingots go in through the window, and fuel goes on the forge the way it always has.
 Shift is the crucible itself and nothing else.
 
+### Running the fire cooler
+
+A forge is not set to a temperature, it is given air, and it settles wherever the fuel and the
+draught put it — which is how vanilla already models it, since a bellows drives the ceiling up by
+a multiplier. A **blast gate** is that same lever below one.
+
+Fit any metal plate to a forge and it becomes the gate. Click the forge to slide it across, and
+watch where the fire ends up:
+
+| gate | ceiling on coke | fuel |
+|---|---|---|
+| open | 1200 °C | vanilla rate |
+| half open | 1020 °C | slower |
+| a quarter open | 840 °C | slower still |
+| shut | 660 °C | about half |
+
+You never choose a number. You move a plate — visibly, on the front of the forge, so a glance
+across the workshop says how a fire is set — and the block info reports the consequence:
+`Blast gate: half open — 1020°C`. Less air also means less fuel burnt, so running cool is a trade
+rather than a free win. Shift-click with an empty hand takes the plate back, and a forge without
+one behaves exactly as it always did.
+
+Metal already hotter than the damped fire cools down to it, which is the point: it makes a forge
+something you can hold a piece *at*, rather than only drive to the fuel's limit.
+
 ### Adding it to an existing world
 
 Forges already standing when the mod is installed are brought up to date as their chunks load,

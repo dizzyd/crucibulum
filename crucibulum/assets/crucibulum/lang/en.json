@@ -16,5 +16,15 @@
 	"blockhelp-forge-opencrucible": "Open the crucible",
 	"blockhelp-forge-takecrucible": "Take the crucible",
 	"forge-meltsat": "Melts at {0}°C",
-	"dlg-meltsat": "{0} · melts at {1}°C"
+	"dlg-meltsat": "{0} · melts at {1}°C",
+	"gate-open": "open",
+	"gate-half": "half open",
+	"gate-quarter": "a quarter open",
+	"gate-shut": "shut",
+	"forge-gate": "Blast gate: {0} — reaches {1}°C",
+	"blockhelp-forge-fitgate": "Fit a blast gate",
+	"blockhelp-forge-workgate": "Work the blast gate",
+	"blockhelp-forge-takegate": "Take the blast gate",
+	"forge-toocold-gate": "Needs {0}°C; the gate is holding this fire to {1}°C",
+	"gate-button": "Blast gate: {0} — {1}°C"
 }

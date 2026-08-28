@@ -12,6 +12,7 @@ using System.Linq;
 using System.Text;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
+using Vintagestory.API.Util;
 using Vintagestory.API.Config;
 using Vintagestory.API.Datastructures;
 using Vintagestory.API.Server;
@@ -171,6 +172,14 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
     {
         ItemSlot slot = byPlayer.InventoryManager.ActiveHotbarSlot;
 
+        // A sheet of metal fitted across the air inlet. It is the plate itself that becomes the
+        // gate, so there is no new item to craft - and taking it back out leaves a plain forge.
+        if (CrucibulumModSystem.Config.EnableBlastGate
+            && !slot.Empty && IsGatePlate(slot.Itemstack) && !HasGate && !byPlayer.Entity.Controls.ShiftKey)
+        {
+            return FitGate(slot, byPlayer);
+        }
+
         if (byPlayer.Entity.Controls.ShiftKey)
         {
             // Shift is the crucible itself, in or back out again, and nothing else. Loading and
@@ -179,7 +188,7 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
             // help offered was not always the one that ran.
             //
             // Everything else under shift - fuel, ingots, ignition - is the vanilla forge's.
-            if (slot.Empty) return TakeCrucible(byPlayer, blockSel);
+            if (slot.Empty) return TakeCrucible(byPlayer, blockSel) || TakeGate(byPlayer);
             if (IsCrucible(slot.Itemstack)) return PutCrucible(slot, byPlayer, blockSel);
             return false;
         }
@@ -189,6 +198,14 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         if (!slot.Empty && IsCrucible(slot.Itemstack) && WorkItemSlot.Empty)
         {
             return PutCrucible(slot, byPlayer, blockSel);
+        }
+
+        // A bare forge with a gate: the click works the flap. Nothing is typed and no temperature is
+        // chosen - the plate moves a notch and the fire goes where the air puts it.
+        if (CrucibleStack == null && HasGate)
+        {
+            CycleGate(byPlayer);
+            return true;
         }
 
         // The window belongs to the crucible, so it only opens for a forge that is holding one.
@@ -334,6 +351,268 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
     }
 
 
+    /// <summary>
+    /// Draws the flap onto the forge.
+    ///
+    /// Into the chunk mesh rather than through the per-frame renderer the crucible uses: a plate
+    /// only moves when someone moves it, so it is static geometry and re-meshed on MarkDirty.
+    ///
+    /// Two things have to be right. The base call draws the forge itself - and, on a ChiselTools
+    /// forge, the chiselled cover, which goes through the same path - so skipping it loses both.
+    /// And the forge turns to face whoever placed it, so the flap takes the same MeshAngleRad
+    /// rotation or it ends up on whichever wall happens to be south.
+    /// </summary>
+    public override bool OnTesselation(ITerrainMeshPool mesher, ITesselatorAPI tessThreadTesselator)
+    {
+        bool skipDefault = base.OnTesselation(mesher, tessThreadTesselator);
+
+        // The inlet first, sunk into the wall and never moving, then the flap over it. Without the
+        // hole the plate reads as decoration bolted to the front, and an open gate reads as nothing
+        // at all rather than as somewhere air gets in.
+        MeshData vent = VentMesh();
+        if (vent != null)
+        {
+            vent = vent.Clone();
+            vent.Rotate(new Vec3f(0.5f, 0, 0.5f), 0, MeshAngleRad, 0);
+            mesher.AddMeshData(vent);
+        }
+
+        MeshData gate = GateMesh();
+        if (gate != null)
+        {
+            gate = gate.Clone();
+            gate.Translate(BlastGate.Slide(GatePosition), 0, 0);
+            gate.Rotate(new Vec3f(0.5f, 0, 0.5f), 0, MeshAngleRad, 0);
+            mesher.AddMeshData(gate);
+        }
+
+        return skipDefault;
+    }
+
+    /// <summary>
+    /// The flap, in the metal it was made of, tesselated once per metal and kept - every forge with
+    /// a copper gate shares one mesh.
+    /// </summary>
+    protected MeshData GateMesh()
+    {
+        if (!HasGate || Api is not ICoreClientAPI capi) return null;
+
+        string metal = GateMetal;
+        Dictionary<string, MeshData> cache = ObjectCacheUtil.GetOrCreate(
+            capi, "crucibulumGateMeshes", () => new Dictionary<string, MeshData>());
+
+        if (cache.TryGetValue(metal, out MeshData cached)) return cached;
+
+        Shape shape = Shape.TryGet(capi, "crucibulum:shapes/block/blastgate.json");
+        if (shape == null)
+        {
+            capi.Logger.Warning("[crucibulum] blast gate shape not found");
+            return null;
+        }
+
+        ITexPositionSource ingots = capi.Tesselator.GetTextureSource(
+            capi.World.GetBlock(new AssetLocation("ingotpile")), returnNullWhenMissing: true);
+        if (ingots == null || ingots[metal] == null) metal = "copper";
+
+        capi.Tesselator.TesselateShape(
+            "crucibulum-blastgate", shape, out MeshData mesh, new MetalTextureSource(capi, ingots, metal));
+
+        cache[GateMetal] = mesh;
+        return mesh;
+    }
+
+    /// <summary>The inlet behind the flap. One mesh for every forge that has a gate.</summary>
+    protected MeshData VentMesh()
+    {
+        if (!HasGate || Api is not ICoreClientAPI capi) return null;
+
+        return ObjectCacheUtil.GetOrCreate(capi, "crucibulumVentMesh", () =>
+        {
+            Shape shape = Shape.TryGet(capi, "crucibulum:shapes/block/blastvent.json");
+            if (shape == null)
+            {
+                capi.Logger.Warning("[crucibulum] blast vent shape not found");
+                return null;
+            }
+
+            capi.Tesselator.TesselateShape(
+                "crucibulum-blastvent", shape, out MeshData mesh, new AtlasTextureSource(capi));
+            return mesh;
+        });
+    }
+
+    /// <summary>Resolves a shape's own texture paths straight off the block atlas.</summary>
+    private class AtlasTextureSource : ITexPositionSource
+    {
+        private readonly ICoreClientAPI capi;
+
+        public AtlasTextureSource(ICoreClientAPI capi) => this.capi = capi;
+
+        public Size2i AtlasSize => capi.BlockTextureAtlas.Size;
+
+        public TextureAtlasPosition this[string textureCode]
+        {
+            get
+            {
+                capi.BlockTextureAtlas.GetOrInsertTexture(
+                    new AssetLocation("game:block/coal/bituminous"), out _, out TextureAtlasPosition pos);
+                return pos;
+            }
+        }
+    }
+
+    /// <summary>Paints the flap with whichever metal was fitted.</summary>
+    private class MetalTextureSource : ITexPositionSource
+    {
+        private readonly ICoreClientAPI capi;
+        private readonly ITexPositionSource ingots;
+        private readonly string metal;
+
+        public MetalTextureSource(ICoreClientAPI capi, ITexPositionSource ingots, string metal)
+        {
+            this.capi = capi;
+            this.ingots = ingots;
+            this.metal = metal;
+        }
+
+        public Size2i AtlasSize => capi.BlockTextureAtlas.Size;
+        public TextureAtlasPosition this[string textureCode] => ingots[metal];
+    }
+
+    /// <summary>
+    /// What the gate is doing, in the only terms that mean anything: how far it is over, and where
+    /// the fire ends up because of it. Never a setpoint - the player moved a plate, and this is the
+    /// consequence.
+    /// </summary>
+    public void AppendGateInfo(StringBuilder dsc)
+    {
+        if (!HasGate) return;
+
+        dsc.AppendLine(Lang.Get("crucibulum:forge-gate",
+            Lang.Get(BlastGate.LangKey(GatePosition)),
+            (int)(MaxTemperature * (1 + extraOxygenRate) * AirFactor)));
+    }
+
+    /// <summary>
+    /// Why the charge will not melt. Blaming the fuel is only right when the fuel is the limit - a
+    /// throttled gate can hold a fire below its charge's melting point on fuel that would otherwise
+    /// manage it easily, and being told to fetch better coke would send someone the wrong way.
+    /// </summary>
+    protected string TooColdText(float meltingPoint, float ceiling)
+    {
+        bool gateIsTheLimit = AirFactor < 1f
+            && meltingPoint <= ceiling / AirFactor;
+
+        return Lang.Get(
+            gateIsTheLimit ? "crucibulum:forge-toocold-gate" : "crucibulum:forge-toocold",
+            (int)meltingPoint, (int)ceiling);
+    }
+
+    /// <summary>Sheet metal, which is what a blast gate is made of.</summary>
+    public static bool IsGatePlate(ItemStack stack) =>
+        stack?.Collectible.Code?.Path.StartsWith("metalplate-") == true;
+
+    public bool FitGate(ItemSlot fromSlot, IPlayer byPlayer)
+    {
+        GateStack = fromSlot.TakeOut(1);
+        GatePosition = GatePosition.Open;
+        fromSlot.MarkDirty();
+
+        Api.World.PlaySoundAt(new AssetLocation("sounds/block/plate"), Pos, 0.4375, byPlayer, true);
+        Api.World.Logger.Audit("{0} fitted a blast gate to the forge at {1}.", byPlayer?.PlayerName, Pos);
+        MarkDirty(true);
+        return true;
+    }
+
+    /// <summary>Fits a gate without a player, for tests and the screenshot scenes.</summary>
+    public void FitGateForTesting(ItemStack plate, GatePosition position)
+    {
+        GateStack = plate;
+        GatePosition = position;
+        MarkDirty(true);
+    }
+
+    public bool TakeGate(IPlayer byPlayer)
+    {
+        if (!HasGate) return false;
+
+        ItemStack plate = GateStack;
+        GateStack = null;
+        GatePosition = GatePosition.Open;
+
+        if (byPlayer?.InventoryManager.TryGiveItemstack(plate) != true)
+        {
+            Api.World.SpawnItemEntity(plate, Pos);
+        }
+
+        Api.World.PlaySoundAt(new AssetLocation("sounds/block/plate"), Pos, 0.4375, byPlayer, true);
+        MarkDirty(true);
+        return true;
+    }
+
+    public void CycleGate(IPlayer byPlayer)
+    {
+        if (!HasGate) return;
+
+        GatePosition = BlastGate.Next(GatePosition);
+        Api.World.PlaySoundAt(new AssetLocation("sounds/block/plate"), Pos, 0.3, byPlayer, true);
+        MarkDirty(true);
+    }
+
+    /// <summary>
+    /// Holds the work item at what the damped fire can actually reach.
+    ///
+    /// Vanilla's tick drives the work item at MaxTemperature regardless, and that property is not
+    /// virtual, so the ceiling cannot be lowered by overriding it. This listener runs after that
+    /// one, so the metal is brought back down here instead - at the rate the fire would have heated
+    /// it, rather than snapped, so a piece cooling to a damped setting takes the time it should.
+    /// </summary>
+    protected void ApplyGate(double hoursPassed)
+    {
+        if (AirFactor >= 1f || !IsBurning) return;
+
+        ItemStack work = WorkItemStack;
+        if (work == null || IsCrucible(work)) return;   // the crucible has its own ceiling
+
+        float stackTemp = work.Collectible.GetTemperature(Api.World, work);
+
+        // The same shadow HeatCrucible keeps, and for the same reason. Vanilla's tick drives the
+        // work item at MaxTemperature every tick, about ten times harder than this pulls back, so
+        // simply nudging the stack down leaves the two fighting and settling well above the damped
+        // ceiling - measured at 563 degC against a target of 440. Holding our own figure and
+        // writing it over the top each tick ignores that rise, exactly as the crucible does.
+        //
+        // A fall is still real and wins: dousing, or the stack cooling on its own between ticks.
+        if (!ReferenceEquals(gatedStack, work) || stackTemp < gatedTemp)
+        {
+            gatedStack = work;
+            gatedTemp = stackTemp;
+        }
+
+        float ceiling = MaxTemperature * (1 + extraOxygenRate) * AirFactor;
+
+        if (gatedTemp > ceiling)
+        {
+            float dt = (float)(hoursPassed * RealSecondsPerInGameHour()) * CrucibulumModSystem.Config.HeatRate;
+            float step = (1 + GameMath.Clamp((gatedTemp - ceiling) / 30, 0, 1.6f)) * dt;
+            gatedTemp = ApproachTemperature(gatedTemp, ceiling, step);
+        }
+
+        // Written every tick, not only while the figure is still falling. Stopping once the shadow
+        // settled on the ceiling left vanilla's tick free to drive the stack straight back up to
+        // the undamped ceiling, which is what a damped forge did until this line moved out of the
+        // block above: the shadow read 440 and the metal sat at 800.
+        if (stackTemp > gatedTemp + 0.01f)
+        {
+            work.Collectible.SetTemperature(Api.World, work, gatedTemp, false);
+            MarkDirty();
+        }
+    }
+
+    /// <summary>The work item temperature the gate is holding. See ApplyGate.</summary>
+    protected float gatedTemp;
+    protected ItemStack gatedStack;
+
     /// <summary>The ingot equivalent of one charge stack: what it would smelt down to.</summary>
     protected float IngotEquivalents(ItemStack stack)
     {
@@ -476,7 +755,9 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
     {
         get
         {
-            float rate = base.BurnRate;
+            // Less air is less fuel burnt, which is what makes damping the fire a trade rather
+            // than a free lunch: run cool and the coke lasts.
+            float rate = base.BurnRate * AirFactor;
             if (!CrucibleDrawsHeat) return rate;
 
             // Guard the zero: a multiplier of 0 would mean a burn rate of 0, which is not "vanilla
@@ -565,10 +846,26 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
             ? cfg.MaxCrucibleTemperature
             : CrucibleStack?.ItemAttributes?["maxHeatableTemp"].AsInt(1200) ?? 1200;
 
-        float fuelCeiling = (MaxTemperature + cfg.CrucibleTempBonus) * (1 + extraOxygenRate);
+        float fuelCeiling = (MaxTemperature + cfg.CrucibleTempBonus) * (1 + extraOxygenRate) * AirFactor;
 
         return Math.Min(ceiling, fuelCeiling);
     }
+
+    /// <summary>
+    /// The air inlet's flap, and the plate someone fitted to make one. No plate, no gate, and the
+    /// forge behaves exactly as it always did.
+    /// </summary>
+    public GatePosition GatePosition { get; protected set; } = GatePosition.Open;
+
+    public ItemStack GateStack { get; protected set; }
+    public bool HasGate => GateStack != null;
+
+    /// <summary>What the fitted gate does to the fire, or nothing at all when there is no gate.</summary>
+    public float AirFactor =>
+        HasGate && CrucibulumModSystem.Config.EnableBlastGate ? BlastGate.AirFactor(GatePosition) : 1f;
+
+    public string GateMetal =>
+        GateStack?.Collectible.Variant.TryGetValue("metal", out string metal) == true ? metal : "copper";
 
     /// <summary>Charge mass at the last tick, to spot metal arriving. See EqualiseCharge.</summary>
     protected float lastChargeIngots = -1;
@@ -583,6 +880,8 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         double hoursPassed = Api.World.Calendar.TotalHours - lastCrucibleTickHours;
         if (hoursPassed < 0) hoursPassed = 0;
         lastCrucibleTickHours = Api.World.Calendar.TotalHours;
+
+        ApplyGate(hoursPassed);
 
         ItemStack crucible = CrucibleStack;
         if (crucible == null)
@@ -928,6 +1227,12 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         capi.Network.SendBlockEntityPacket(Pos, (int)EnumBlockEntityPacketId.Open, null);
     }
 
+    /// <summary>
+    /// Our own packet, kept clear of vanilla's block entity ids and of the slot packets, which are
+    /// everything under 1000.
+    /// </summary>
+    public const int CycleGatePacketId = 1701;
+
     public override void OnReceivedClientPacket(IPlayer player, int packetid, byte[] data)
     {
         if (packetid == (int)EnumBlockEntityPacketId.Close)
@@ -940,6 +1245,14 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         {
             Api.World.Logger.Audit("Player {0} sent an inventory packet to a forge crucible at {1} but has no claim access. Rejected.",
                 player.PlayerName, Pos);
+            return;
+        }
+
+        // Working the gate through the window. A forge holding a crucible opens the window on a
+        // click, so the click that works the gate on a bare forge is not available here.
+        if (packetid == CycleGatePacketId)
+        {
+            CycleGate(player);
             return;
         }
 
@@ -993,6 +1306,10 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
             ? 0
             : crucible.Collectible.GetMeltingDuration(Api.World, chargeProvider, WorkItemSlot));
 
+        tree.SetInt("haveGate", HasGate ? 1 : 0);
+        tree.SetString("gatePositionKey", BlastGate.LangKey(GatePosition));
+        tree.SetInt("gateCeiling", (int)(MaxTemperature * (1 + extraOxygenRate) * AirFactor));
+
         tree.SetString("statusText", DialogStatusText(crucible));
     }
 
@@ -1040,7 +1357,7 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
 
         float meltingPoint = crucible.Collectible.GetMeltingPoint(Api.World, chargeProvider, WorkItemSlot);
         float ceiling = CrucibleMaxTemperature();
-        if (meltingPoint > ceiling) sb.AppendLine(Lang.Get("crucibulum:forge-toocold", (int)meltingPoint, (int)ceiling));
+        if (meltingPoint > ceiling) sb.AppendLine(TooColdText(meltingPoint, ceiling));
 
         return sb.ToString().TrimEnd();
     }
@@ -1069,6 +1386,9 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         base.FromTreeAttributes(tree, worldForResolving);
 
         meltProgress = tree.GetFloat("meltProgress");
+        GatePosition = (GatePosition)tree.GetInt("gatePosition");
+        GateStack = tree.GetItemstack("gateStack");
+        GateStack?.ResolveBlockOrItem(worldForResolving);
 
         // Contents just arrived from the server; whatever we last said about them is stale.
         InvalidateStatusText();
@@ -1082,6 +1402,8 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         base.ToTreeAttributes(tree);
 
         tree.SetFloat("meltProgress", meltProgress);
+        tree.SetInt("gatePosition", (int)GatePosition);
+        if (GateStack != null) tree.SetItemstack("gateStack", GateStack);
     }
 
     public override void OnBlockBroken(IPlayer byPlayer = null)
@@ -1091,6 +1413,12 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         foreach (ItemSlot slot in ChargeSlots)
         {
             if (!slot.Empty) Api.World.SpawnItemEntity(slot.Itemstack, Pos);
+        }
+
+        if (GateStack != null)
+        {
+            Api.World.SpawnItemEntity(GateStack, Pos);
+            GateStack = null;
         }
 
         base.OnBlockBroken(byPlayer);
@@ -1206,6 +1534,8 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
             }
         }
 
+        AppendGateInfo(dsc);
+
         float duration = crucible.Collectible.GetMeltingDuration(Api.World, chargeProvider, WorkItemSlot);
         float meltingPoint = crucible.Collectible.GetMeltingPoint(Api.World, chargeProvider, WorkItemSlot);
         float ceiling = CrucibleMaxTemperature();
@@ -1216,7 +1546,7 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         }
         else if (meltingPoint > ceiling)
         {
-            dsc.AppendLine(Lang.Get("crucibulum:forge-toocold", (int)meltingPoint, (int)ceiling));
+            dsc.AppendLine(TooColdText(meltingPoint, ceiling));
         }
         else if (meltingPoint > 0 && !IsMoltenCrucible(crucible))
         {
