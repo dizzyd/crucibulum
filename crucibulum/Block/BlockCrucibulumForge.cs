@@ -6,7 +6,10 @@
 // Software Foundation, either version 3 of the License, or (at your option) any
 // later version. See COPYING.LESSER, or <https://www.gnu.org/licenses/>.
 
+using System;
 using System.Collections.Generic;
+using System.Reflection;
+using Vintagestory.API.MathTools;
 using System.Linq;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
@@ -91,6 +94,60 @@ public class BlockCrucibulumForge : BlockForge
         }
 
         return base.OnBlockInteractStart(world, byPlayer, blockSel);
+    }
+
+    /// <summary>
+    /// ChiselTools' decorative forge names itself after whatever has been chiselled onto it. That
+    /// naming lives in the block class this one replaces, while the chiselling itself lives in a
+    /// block entity behaviour that survives the swap - so ask the behaviour rather than reimplement
+    /// it, and leave every other forge on the ordinary name.
+    ///
+    /// By type and method name, because this mod does not reference theirs. That is exactly the
+    /// kind of lookup that compiles cleanly and fails at runtime, so it fails to the ordinary name
+    /// - which is what an uncovered forge shows anyway - and CompatChiselTools asserts that it
+    /// still resolves against the mod as shipped.
+    /// </summary>
+    public override string GetPlacedBlockName(IWorldAccessor world, BlockPos pos)
+    {
+        string covered = ChiselledCoverName(world, pos);
+        return string.IsNullOrEmpty(covered) ? base.GetPlacedBlockName(world, pos) : covered;
+    }
+
+    private const string CoverBehavior = "BEBChiseledCover";
+    private const string CoverNameMethod = "GetChiseledName";
+
+    private static MethodInfo coverName;
+    private static Type coverNameOwner;
+
+    public static string ChiselledCoverName(IWorldAccessor world, BlockPos pos)
+    {
+        BlockEntity be = world.BlockAccessor.GetBlockEntity(pos);
+        if (be?.Behaviors == null) return null;
+
+        foreach (BlockEntityBehavior beh in be.Behaviors)
+        {
+            Type t = beh.GetType();
+            if (t.Name != CoverBehavior) continue;
+
+            // One lookup per behaviour type, not per tooltip.
+            if (!ReferenceEquals(t, coverNameOwner))
+            {
+                coverNameOwner = t;
+                coverName = t.GetMethod(CoverNameMethod, Type.EmptyTypes);
+            }
+
+            if (coverName == null) return null;
+            try
+            {
+                return coverName.Invoke(beh, null) as string;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        return null;
     }
 
     public override WorldInteraction[] GetPlacedBlockInteractionHelp(IWorldAccessor world, BlockSelection selection, IPlayer forPlayer)

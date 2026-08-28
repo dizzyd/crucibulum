@@ -1,0 +1,16 @@
+[
+	{
+		"file": "chiseltools:blocktypes/chiseledforge.json",
+		"op": "replace",
+		"path": "/class",
+		"value": "CrucibulumForge",
+		"dependsOn": [ { "modid": "chiseltools" } ]
+	},
+	{
+		"file": "chiseltools:blocktypes/chiseledforge.json",
+		"op": "replace",
+		"path": "/entityClass",
+		"value": "CrucibulumForge",
+		"dependsOn": [ { "modid": "chiseltools" } ]
+	}
+]

@@ -26,6 +26,13 @@ being left open over an empty slot.
 Ore and ingots go in through the window, and fuel goes on the forge the way it always has.
 Shift is the crucible itself and nothing else.
 
+### Other mods' forges
+
+QPTech's [ChiselTools](https://mods.vintagestory.at/chiseltools) decorative forge melts metal too,
+and keeps its chiselled cover — see [docs/compat.md](docs/compat.md) for why that works and what
+would break it. The support is a patch guarded with `dependsOn`, so it costs nothing when
+ChiselTools is not installed.
+
 ### Smithing is untouched
 
 A forge with no crucible in it behaves exactly as it always has, and there is a suite of tests
