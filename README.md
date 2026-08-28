@@ -341,4 +341,5 @@ untested. A bellows is simulated by setting the oxygen rate rather than by placi
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+GNU Lesser General Public License v3 or later — see [COPYING.LESSER](COPYING.LESSER) and
+[COPYING](COPYING), with the summary in [NOTICE](NOTICE).

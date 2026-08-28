@@ -1,7 +1,10 @@
 // Crucibulum - melt metal in a crucible on the forge, for Vintage Story
-// Copyright (c) 2026 Dave (Dizzy) Smith
+// Copyright (C) 2026 Dave (Dizzy) Smith
 //
-// Released under the MIT License. See LICENSE.
+// This program is free software: you can redistribute it and/or modify it under
+// the terms of the GNU Lesser General Public License as published by the Free
+// Software Foundation, either version 3 of the License, or (at your option) any
+// later version. See COPYING.LESSER, or <https://www.gnu.org/licenses/>.
 
 using System;
 using System.IO;
@@ -118,10 +121,14 @@ public sealed class PackageTask : FrostingTask<BuildContext>
             context.CopyFile($"../{BuildContext.ProjectName}/modicon.png", $"../Releases/{context.Name}/modicon.png");
         }
 
-        // The zip is what gets redistributed, so the licence travels with it.
-        if (context.FileExists("../LICENSE"))
+        // The zip is what gets redistributed, and the Lesser licence asks that a copy travel with
+        // the binary rather than only living in the repo.
+        foreach (string legal in new[] { "COPYING", "COPYING.LESSER", "NOTICE" })
         {
-            context.CopyFile("../LICENSE", $"../Releases/{context.Name}/LICENSE");
+            if (context.FileExists($"../{legal}"))
+            {
+                context.CopyFile($"../{legal}", $"../Releases/{context.Name}/{legal}");
+            }
         }
 
         context.Zip($"../Releases/{context.Name}", $"../Releases/{context.Name}_{context.Version}.zip");
