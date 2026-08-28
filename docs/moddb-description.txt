@@ -22,8 +22,8 @@ still wants a firepit, and iron is bloomery work as it always was.
 Using it
 Right-click the forge with a crucible to set it in, or shift-right-click — either works, as at
 a firepit. Right-click a forge that has a crucible in it to open the crucible window;
-shift-right-click with an empty hand to take the crucible back out. Shift-right-click ore or ingots to drop one in a click at
-a time, or hold Ctrl for the whole stack.
+shift-right-click with an empty hand to take the crucible back out. Ore and ingots go in through
+the window, and fuel goes on the forge the way it always has.
 
 Smithing is untouched. A forge holding an ingot hands it over on a plain right-click exactly as
 it always did, and burns fuel at exactly the rate it always did.
@@ -44,8 +44,9 @@ is fine but cold. This says so, and says what it wants:
   Tin bronze needs Tin 8-12%, Copper 88-92%
 
 If the metals make no alloy at all it says they will not combine and quotes no ratio, rather
-than sending you after a recipe that does not exist. All of it is in the block info too, so
-you need not open anything for the common case.
+than sending you after a recipe that does not exist. The temperature line carries what it is
+climbing towards — 900°C · melts at 1084°C — and drops the target once the metal is
+going. All of it is in the block info too, so you need not open anything for the common case.
 
 Heat
 A charge comes up to temperature, melts, and is then held. Each is different work for the fire.
@@ -81,8 +82,9 @@ Anything below a row's ceiling melts on that fuel. Run a bellows in and the ceil
 multiplied as it is for any forge — but the 1200 °C clamp does not move, so iron stays out of
 reach however hard you blow.
 
-The crucible glows through the incandescence range as it heats, and changes colour again the
-moment the charge goes liquid, so a forge across the yard tells you whether it is ready.
+The crucible climbs the same incandescence range a work item on the forge does — dull red,
+through orange, to pale yellow — and the metal itself lights up in the mouth once it is liquid,
+so a forge across the yard tells you roughly how far along it is.
 
 Notes
 

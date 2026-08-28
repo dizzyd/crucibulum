@@ -6,8 +6,8 @@ Vintage Story 1.22 gave the forge a real rebuild — fuel types that matter, a b
 actually drives the temperature. This puts a crucible in it, so the forge earns its keep
 between heats instead of sitting idle while you walk back to a firepit.
 
-The crucible glows through the incandescence range as it heats, and changes colour again the
-moment the charge goes liquid.
+The crucible climbs the same incandescence range a work item on the forge does — dull red,
+through orange, to pale yellow — and the metal itself lights up in the mouth once it is liquid.
 
 ## Using it
 
@@ -19,8 +19,12 @@ Same gestures a firepit uses.
 | **Right click** with a crucible | set it in the forge |
 | **Shift + right click** with a crucible | set it in the forge |
 | **Shift + right click**, empty handed | take the crucible back out |
-| **Shift + right click** with ore, nuggets or ingots | one into the crucible |
-| **Shift + Ctrl + right click** | the whole stack |
+
+The window belongs to the crucible: take the crucible off the forge and it closes, rather than
+being left open over an empty slot.
+
+Ore and ingots go in through the window, and fuel goes on the forge the way it always has.
+Shift is the crucible itself and nothing else.
 
 ### Smithing is untouched
 
@@ -70,15 +74,20 @@ Tin bronze needs Tin 8-12%, Copper 88-92%
 If the metals make no alloy at all, it says they will not combine and quotes no ratio, rather
 than sending you after a recipe that does not exist.
 
-The slots filter what they will take — ore and ingots in the crucible, fuel in the fuel slot —
-so the window cannot be used as a chest.
+The slots filter what they will take — ore and ingots only — so the window cannot be used as a
+chest. There is no fuel slot: the forge is fuelled the way a forge has always been fuelled, by
+shift-clicking coal onto it, and this window is only about what goes in the crucible.
 
 ### And the same thing in the block info
 
 You do not have to open anything for the common case. Point at the forge and the contents,
-shares, yield, `Melting: 45%`, and finally `Molten: 200 units of Copper — ready to pour` are all
-in the block info. If the fuel cannot get there it tells you that too:
-`Needs 1084°C; this fuel tops out at 1000°C`.
+shares, yield, `Melts at 1084°C`, `Melting: 45%`, and finally
+`Molten: 200 units of Copper — ready to pour` are all in the block info. If the fuel cannot get
+there it says so instead: `Needs 1084°C; this fuel tops out at 1000°C`.
+
+The window carries the same target on its temperature line — `900°C · melts at 1084°C` — so
+there is no guessing what a crucible is waiting for. It drops off once the metal is going, when
+the bar underneath has taken over the question.
 
 ### What you can melt
 
