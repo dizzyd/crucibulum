@@ -51,6 +51,12 @@ one behaves exactly as it always did.
 Metal already hotter than the damped fire cools down to it, which is the point: it makes a forge
 something you can hold a piece *at*, rather than only drive to the fuel's limit.
 
+It works on a seated crucible too, which is what makes bit smithing possible at a forge. Vanilla
+counts metal as workable at half its melting point, so copper bits are workable from 542 °C and
+molten at 1084 — a quarter-open gate settles a crucible of them at about 830 °C, hot enough to
+work and never near melting. Copper, gold and silver all have at least two notches inside their
+band.
+
 ### Adding it to an existing world
 
 Forges already standing when the mod is installed are brought up to date as their chunks load,

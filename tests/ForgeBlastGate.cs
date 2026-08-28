@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -326,5 +327,101 @@ namespace Crucibulum.Tests
             be?.GetType()
               .GetMethod(method, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
               ?.Invoke(be, null) as MeshData;
+
+        // Copper: vanilla makes metal workable at half its melting point, so bits and nuggets are
+        // workable from 542 degC and molten at 1084.
+        const float CopperWorkable = 542f;
+        const float CopperMelts = 1084f;
+
+        static async Task<BlockEntityCrucibulumForge> ACrucibleOfCopperBits(GatePosition? gate)
+        {
+            var be = await AForge();
+            be.WorkItemSlot.Itemstack = World.Stack("game:crucible-brown-fired");
+            be.AddCharge(new DummySlot(World.Stack("game:nugget-nativecopper", 20)), 20);
+            be.FuelSlot.Itemstack = World.Stack("game:coke", 6);   // enough not to burn out mid-run
+            if (gate != null) be.FitGateForTesting(World.Stack("game:metalplate-copper"), gate.Value);
+            be.MarkDirty(true);
+
+            peakTemp = 0;
+            for (int i = 0; i < 60; i++)
+            {
+                await Hours(0.05);
+                await Ticks(6);
+                peakTemp = Math.Max(peakTemp, CrucibleTemp(Forge));
+            }
+            return Forge;
+        }
+
+        /// <summary>
+        /// The hottest the crucible got, which is not the same as where it ends up: latent heat
+        /// holds the temperature almost still while a charge is actually melting, and the fire
+        /// burns down afterwards. Reading the final figure to decide whether something melted
+        /// reports 933 degC on a crucible that plainly did.
+        /// </summary>
+        static float peakTemp;
+
+        static float CrucibleTemp(BlockEntityCrucibulumForge be) =>
+            be.CrucibleStack.Collectible.GetTemperature(Sapi.World, be.CrucibleStack);
+
+        [VsTest(TimeoutMs = 240000)]
+        public async Task ADampedCrucibleHoldsBitsWorkableWithoutMeltingThem()
+        {
+            // This is the case the whole gate was asked for: Smithing Plus's bit smithing heats
+            // bits and native nuggets in a crucible at the workable temperature without letting
+            // them melt, and until now the only control over a forge was which fuel you loaded.
+            //
+            // It runs through a different path from the work item clamp - ApplyGate leaves a
+            // crucible alone because CrucibleMaxTemperature already carries the air factor - so it
+            // is worth proving rather than assuming the two agree.
+            var be = await ACrucibleOfCopperBits(GatePosition.Quarter);
+
+            float temp = CrucibleTemp(be);
+            Log($"  quarter-open crucible settled at {temp:0} degC (workable {CopperWorkable:0}, melts {CopperMelts:0})");
+
+            Assert.Greater(temp, CopperWorkable, "hot enough to work the bits");
+            Assert.Less(temp, CopperMelts, "but never hot enough to melt them");
+            Assert.Less(peakTemp, CopperMelts, "and never was, at any point in the run");
+            Assert.False(BlockEntityCrucibulumForge.IsMoltenCrucible(be.CrucibleStack), "still bits, not a pour");
+            Assert.Close(0f, be.MeltProgress, 0.001f, "and no melt has begun");
+        }
+
+        [VsTest(TimeoutMs = 240000)]
+        public async Task TheSameCrucibleMeltsWithTheGateOpen()
+        {
+            // The control. Without it the test above passes just as well on a forge that could
+            // never melt copper in the first place, and proves nothing about the gate.
+            var be = await ACrucibleOfCopperBits(GatePosition.Open);
+
+            Log($"  open crucible peaked at {peakTemp:0} degC, melt progress {be.MeltProgress:0.00}");
+            Assert.Greater(peakTemp, CopperMelts, "an open forge takes copper past melting");
+            Assert.Greater(be.MeltProgress, 0f, "and the charge is going");
+        }
+
+        [VsTest]
+        public async Task EveryBitSmithingMetalHasANotchThatHoldsIt()
+        {
+            // Copper, gold and silver are the three Smithing Plus names for bit smithing. Each
+            // wants a ceiling at or above half its melting point and below the melting point
+            // itself; if no notch lands in that band the feature is useless for that metal.
+            var be = await AForge();
+            be.WorkItemSlot.Itemstack = World.Stack("game:crucible-brown-fired");
+
+            foreach (var (metal, melts) in new[] { ("copper", 1084f), ("gold", 1063f), ("silver", 961f) })
+            {
+                float workable = melts / 2;
+                string fits = "";
+
+                foreach (var position in new[] { GatePosition.Open, GatePosition.Half, GatePosition.Quarter, GatePosition.Shut })
+                {
+                    be.FitGateForTesting(World.Stack("game:metalplate-copper"), position);
+                    float ceiling = be.CrucibleMaxTemperature();
+                    if (ceiling >= workable && ceiling < melts) fits += (fits == "" ? "" : ", ") + position;
+                }
+
+                Log($"  {metal}: workable {workable:0}, melts {melts:0} -> {(fits == "" ? "no notch" : fits)}");
+                Assert.False(fits == "", $"{metal} bits can be held workable without melting");
+            }
+            await Task.CompletedTask;
+        }
     }
 }
