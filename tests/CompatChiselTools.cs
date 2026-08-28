@@ -259,7 +259,10 @@ namespace Crucibulum.Tests
             be.MarkDirty(true);
             await Ticks(2);
 
-            foreach (var e in World.Entities(ForgePos, 6)) e.Die(EnumDespawnReason.Removed);
+            // Items only. World.Entities returns everything in radius, the player included, and
+            // clearing leftovers with an unfiltered loop kills him - no damage source, no death
+            // reason, just a death screen that then blocks every interaction test after it.
+            foreach (var e in World.Entities(ForgePos, 6).OfType<EntityItem>()) e.Die(EnumDespawnReason.Removed);
             await Ticks(2);
 
             // Waited on rather than counted out in ticks: the spawned entities are not in the world

@@ -18,6 +18,10 @@ namespace Crucibulum.Tests
     /// </summary>
     public class ForgeDialog
     {
+        /// <summary>A forge is a heat source and these tests stand next to lit ones. See TestLife.</summary>
+        [BeforeEach]
+        public async Task KeepThePlayerAlive() => await TestLife.Alive();
+
         static BlockPos ForgePos => P(8, 0, 8);
         static BlockEntityCrucibulumForge Forge => World.BE<BlockEntityCrucibulumForge>(ForgePos);
 
