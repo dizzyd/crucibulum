@@ -64,6 +64,30 @@ ssh <host> 'cd vstestkit-crucibulum && bash scripts/run.sh ~/mods/crucibulum/tes
 
 Verified against ChiselTools 1.17.6 on Vintage Story 1.22.
 
+## Worlds that predate the mod
+
+The same patching that makes a forge ours only applies to forges placed from then on. A saved
+chunk records the class its block entity was written with, so an existing forge loads as
+`BlockEntityForge` under a `BlockCrucibulumForge` — half-working, and only fixed by breaking and
+replacing it.
+
+`CrucibulumModSystem` swaps those as their chunks load, carrying the old block entity's tree
+across. Two things about that are easy to get wrong and are worth keeping:
+
+- **It runs a tick after `ChunkColumnLoaded`, not during.** At the event itself the column is
+  present but its block entities are not — every chunk reports zero — so scanning there finds
+  nothing to upgrade, silently and always. The column is re-fetched rather than captured, since it
+  may have gone again by the time the callback runs.
+- **It is gated on the block being ours**, so it upgrades a ChiselTools forge too. Their cover
+  rides on a behaviour and travels with the tree; `CompatChiselTools` asserts that, because getting
+  it wrong would destroy decorated forges across an existing base rather than fail loudly.
+
+`tests/ForgeUpgrade.cs` builds the legacy state directly — spawn the vanilla block entity by name
+onto a block that is ours — because the harness cannot save and reload across two different mod
+sets. The end-to-end path was checked by hand instead: plant a forge in a world booted without the
+mod, stop, reboot with `VSTK_KEEP=1` and the mod in the path, and confirm the block entity comes
+back as ours with its contents.
+
 ### Other forges
 
 The same patch shape works for any forge whose block entity derives from `BlockEntityForge`, as

@@ -262,12 +262,13 @@ namespace Crucibulum.Tests
             foreach (var e in World.Entities(ForgePos, 6)) e.Die(EnumDespawnReason.Removed);
             await Ticks(2);
 
-            // Two waits, not one: the spawned entities are not in the world the instant the break
-            // returns, and querying too early reads as the crucible having been destroyed.
+            // Waited on rather than counted out in ticks: the spawned entities are not in the world
+            // the instant the break returns, and querying too early reads as the crucible having
+            // been destroyed - which it did, intermittently, when this waited a fixed six ticks.
             be.OnBlockBroken(null);
-            await Ticks(2);
             World.SetBlock("game:air", ForgePos);
-            await Ticks(4);
+            await Until(() => World.Entities(ForgePos, 6).OfType<EntityItem>().Count() >= 2, 60,
+                "the forge to drop its contents");
 
             string[] dropped = World.Entities(ForgePos, 6)
                 .OfType<EntityItem>()
@@ -281,5 +282,43 @@ namespace Crucibulum.Tests
             Assert.True(dropped.Any(c => c.Contains("crucible")), "and the crucible with it");
         }
 
+
+        [VsTest]
+        public async Task ALegacyChiselledForgeUpgradesWithoutLosingItsCover()
+        {
+            if (Absent("the upgrade path")) return;
+
+            // Someone who already had chiselled forges when this mod arrived gets their block
+            // entities swapped for ours as the chunks load. Their cover rides on a behaviour, and
+            // the swap carries the whole tree across - but getting that wrong would quietly destroy
+            // decorated forges all over an existing base, which is not a thing to leave to reasoning.
+            World.SetBlock("game:air", ForgePos);
+            await Ticks(1);
+            World.SetBlock(ChiselledForge, ForgePos);
+            await Ticks(2);
+
+            // Their block entity on our block: exactly what a pre-existing chiselled forge loads as.
+            Sapi.World.BlockAccessor.RemoveBlockEntity(ForgePos);
+            Sapi.World.BlockAccessor.SpawnBlockEntity("BEDecoForge", ForgePos);
+            await Ticks(2);
+
+            BlockEntity legacy = Sapi.World.BlockAccessor.GetBlockEntity(ForgePos);
+            Assert.False(legacy is BlockEntityCrucibulumForge, "starts as theirs, not ours");
+            Assert.True(ApplyCover(legacy, AChiselledGraniteBlock()), "with a cover on it");
+            legacy.MarkDirty(true);
+            await Ticks(2);
+
+            string before = CoverName(legacy);
+            Assert.False(string.IsNullOrEmpty(before), "the cover took");
+
+            var chunk = Sapi.WorldManager.GetChunk(ForgePos);
+            CrucibulumModSystem.UpgradeForgesIn(Sapi, new[] { (IWorldChunk)chunk });
+            await Ticks(2);
+
+            var fresh = World.BE<BlockEntityCrucibulumForge>(ForgePos);
+            Assert.NotNull(fresh, "it came back as ours");
+            Log($"  cover through the upgrade: \"{CoverName(fresh)}\"");
+            Assert.Equal(before, CoverName(fresh), "and kept the cover it was decorated with");
+        }
     }
 }

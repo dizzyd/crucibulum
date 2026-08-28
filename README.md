@@ -26,6 +26,15 @@ being left open over an empty slot.
 Ore and ingots go in through the window, and fuel goes on the forge the way it always has.
 Shift is the crucible itself and nothing else.
 
+### Adding it to an existing world
+
+Forges already standing when the mod is installed are brought up to date as their chunks load,
+keeping whatever was in them. Nothing to do by hand — and in particular nothing to break and
+replace, which is what an earlier version required: patching the blocktype changes what gets built
+from then on, but a saved chunk records the class its block entity was written with, so an existing
+forge came back as the vanilla one under a block that was already ours. It offered the crucible in
+its interaction help and then did nothing.
+
 ### Other mods' forges
 
 QPTech's [ChiselTools](https://mods.vintagestory.at/chiseltools) decorative forge melts metal too,
