@@ -85,4 +85,23 @@ public class CrucibulumConfig
     /// still be taken back out.
     /// </summary>
     public bool EnableBlastGate = true;
+
+    /// <summary>
+    /// What each notch of the blast gate does to the fire, as a share of full draught. These are
+    /// the same lever vanilla's bellows works from the other side, where the ceiling is
+    /// <c>MaxTemperature * (1 + extraOxygenRate)</c> and a bellows takes the multiplier up to about
+    /// 1.64 - so one is an open gate and anything less is a throttled one.
+    ///
+    /// A gate only ever restricts, so these are clamped to at most one however they are set here;
+    /// a plate over the air inlet cannot make a fire burn hotter than an open one. They are also
+    /// held above zero, since shut is a banked fire rather than an airtight one.
+    ///
+    /// Shut at 0.55 puts a crucible on coke at about 660 degC, which sits inside the workable band
+    /// of most metals - vanilla counts metal workable at half its melting point. Moving these moves
+    /// which metals can be held workable without melting.
+    /// </summary>
+    public float GateAirOpen = 1.00f;
+    public float GateAirHalf = 0.85f;
+    public float GateAirQuarter = 0.70f;
+    public float GateAirShut = 0.55f;
 }

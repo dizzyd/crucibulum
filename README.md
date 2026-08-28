@@ -243,9 +243,16 @@ firepit, which reads its ingredients from whatever heat source is holding it.
 | `MaxCrucibleTemperature` | hard ceiling; 0 means use the crucible's `maxHeatableTemp` |
 | `CrucibleFuelUseVsFirepit` | burn rate while working, against a firepit's per-second rate (0.6); 0 disables the correction |
 | `CrucibleThermalMass` | the clay's own heat capacity in ingot-equivalents; sets how much charge size matters |
-| `MoltenHoldFuelShare` | what holding a melt costs as a fraction of making one (0.25) |
+| `MoltenHoldFuelShare` | what holding a melt costs as a fraction of making one (0.35) |
 | `HeatRate` | how briskly the crucible climbs; the curve eases in near the ceiling |
 | `MeltSpeedMultiplier` | 1 matches the firepit |
+| `EnableBlastGate` | whether a forge can be fitted with a gate at all |
+| `GateAirOpen`, `GateAirHalf`, `GateAirQuarter`, `GateAirShut` | what each notch does to the fire, as a share of full draught (1.0 / 0.85 / 0.7 / 0.55) |
+
+The gate factors are the same lever a bellows works from the other side, so 1 is full draught and
+less is throttled. They are clamped to at most 1 — a plate over the air inlet cannot make a fire
+hotter than an open one — and held above zero, since shut is a banked fire rather than an airtight
+one. Moving them moves which metals can be held workable without melting.
 
 ## How it hooks in
 

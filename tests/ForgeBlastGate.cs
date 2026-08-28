@@ -423,5 +423,59 @@ namespace Crucibulum.Tests
             }
             await Task.CompletedTask;
         }
+
+        [VsTest]
+        public async Task TheNotchesComeFromTheConfig()
+        {
+            // Every other number in this mod is tunable; these were the one set that was not, which
+            // makes them the ones a server owner cannot fix when they do not suit their pack.
+            var be = await AForge();
+            be.FitGateForTesting(World.Stack("game:metalplate-copper"), GatePosition.Quarter);
+
+            float asShipped = be.CrucibleMaxTemperature();
+            float original = CrucibulumModSystem.Config.GateAirQuarter;
+
+            try
+            {
+                CrucibulumModSystem.Config.GateAirQuarter = original / 2;
+                float halved = Forge.CrucibleMaxTemperature();
+                Log($"  quarter at {original:0.00} gives {asShipped:0} degC; at {original / 2:0.00} gives {halved:0} degC");
+                Assert.Less(halved, asShipped, "turning the notch down cools the fire");
+            }
+            finally
+            {
+                CrucibulumModSystem.Config.GateAirQuarter = original;
+            }
+            await Task.CompletedTask;
+        }
+
+        [VsTest]
+        public async Task ANonsenseConfigCannotMakeAGateAHeater()
+        {
+            // A gate is a plate over the air inlet. However it is configured it can only restrict,
+            // and it cannot be airtight either - zero would take the ceiling to nothing and divide
+            // the burn rate away with it.
+            var be = await AForge();
+            be.FitGateForTesting(World.Stack("game:metalplate-copper"), GatePosition.Shut);
+
+            float open = CrucibulumModSystem.Config.GateAirOpen;
+            float shut = CrucibulumModSystem.Config.GateAirShut;
+
+            try
+            {
+                CrucibulumModSystem.Config.GateAirShut = 5f;
+                Assert.Close(1f, Forge.AirFactor, 0.001f, "clamped to full draught, not five times it");
+
+                CrucibulumModSystem.Config.GateAirShut = 0f;
+                Assert.Greater(Forge.AirFactor, 0f, "and never to nothing");
+                Assert.Greater(Forge.BurnRate, 0f, "so the fire still burns fuel");
+            }
+            finally
+            {
+                CrucibulumModSystem.Config.GateAirOpen = open;
+                CrucibulumModSystem.Config.GateAirShut = shut;
+            }
+            await Task.CompletedTask;
+        }
     }
 }

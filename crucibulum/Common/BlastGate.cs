@@ -6,6 +6,8 @@
 // Software Foundation, either version 3 of the License, or (at your option) any
 // later version. See COPYING.LESSER, or <https://www.gnu.org/licenses/>.
 
+using Vintagestory.API.MathTools;
+
 namespace Crucibulum;
 
 /// <summary>
@@ -42,13 +44,23 @@ public static class BlastGate
     /// What each position does to the fire's ceiling. Shut is not airtight - a banked forge still
     /// burns, it just cannot get near forging heat - so the range stops well short of zero.
     /// </summary>
-    public static float AirFactor(GatePosition position) => position switch
+    public static float AirFactor(GatePosition position)
     {
-        GatePosition.Open => 1.00f,
-        GatePosition.Half => 0.85f,
-        GatePosition.Quarter => 0.70f,
-        _ => 0.55f,
-    };
+        CrucibulumConfig cfg = CrucibulumModSystem.Config;
+
+        float factor = position switch
+        {
+            GatePosition.Open => cfg.GateAirOpen,
+            GatePosition.Half => cfg.GateAirHalf,
+            GatePosition.Quarter => cfg.GateAirQuarter,
+            _ => cfg.GateAirShut,
+        };
+
+        // Clamped rather than trusted. A gate is a plate over the air inlet: it can only ever
+        // restrict, so nothing above full draught, and shut is a banked fire rather than an
+        // airtight one, so nothing at zero either - which would also divide the burn rate away.
+        return GameMath.Clamp(factor, 0.05f, 1f);
+    }
 
     /// <summary>
     /// How far the plate has been drawn back, in blocks. This is the whole readout: shut covers the
