@@ -526,8 +526,10 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
     }
 
     /// <summary>Sheet metal, which is what a blast gate is made of.</summary>
-    public static bool IsGatePlate(ItemStack stack) =>
-        stack?.Collectible.Code?.Path.StartsWith("metalplate-") == true;
+    public static bool IsGatePlate(ItemStack stack) => IsGatePlate(stack?.Collectible);
+
+    public static bool IsGatePlate(CollectibleObject collectible) =>
+        collectible?.Code?.Path.StartsWith("metalplate-") == true;
 
     public bool FitGate(ItemSlot fromSlot, IPlayer byPlayer)
     {

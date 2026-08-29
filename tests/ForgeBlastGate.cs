@@ -649,6 +649,34 @@ namespace Crucibulum.Tests
             Assert.Equal(GatePosition.Open, StandingForge.GatePosition, "and does not touch the gate");
         }
 
+        [VsTest(TimeoutMs = 120000), RequiresClient]
+        public async Task TheGateSaysHowItIsWorked()
+        {
+            // Three lang keys existed for this from the day the gate was written and nothing ever
+            // used them, so nothing in the world said a forge would take a plate at all.
+            var be = await AForgeOnTheFloor();
+            be.FitGateForTesting(World.Stack("game:metalplate-copper"), GatePosition.Open);
+            be.MarkDirty(true);
+            await Ticks(20);
+
+            await OnClient();
+            var block = Capi.World.BlockAccessor.GetBlock(StandingForgePos);
+            var sel = new BlockSelection
+            {
+                Position = StandingForgePos.Copy(),
+                Face = BlockFacing.SOUTH,
+                HitPosition = new Vec3d(0.5, 0.3, 0.94),
+            };
+            var help = block.GetPlacedBlockInteractionHelp(Capi.World, sel, Capi.World.Player);
+            await OnServer();
+
+            string[] codes = help.Select(h => h.ActionLangCode).ToArray();
+            Log("  help offers: " + string.Join(", ", codes));
+
+            Assert.Contains(string.Join(",", codes), "blockhelp-forge-workgate", "how to work the gate");
+            Assert.Contains(string.Join(",", codes), "blockhelp-forge-takegate", "and how to take it off");
+        }
+
         /// <summary>
         /// Looks at the plate until the selection actually lands on it. The plate is a band low on
         /// one face, and where a ray aimed at it comes down depends on how tall the player is and
