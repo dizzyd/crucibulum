@@ -88,6 +88,36 @@ sets. The end-to-end path was checked by hand instead: plant a forge in a world 
 mod, stop, reboot with `VSTK_KEEP=1` and the mod in the path, and confirm the block entity comes
 back as ours with its contents.
 
+## ConfigLib
+
+`CrucibulumModSystem.RegisterWithConfigLib` hands the config to
+[ConfigLib](https://mods.vintagestory.at/configlib) when it is installed, by reflection against
+`ConfigLib.ConfigLibModSystem.RegisterCustomManagedConfig` — so it is optional at build time as
+well as run time, and nothing third-party lives in this repo or the release zip.
+
+The settings screen is the visible half. The half that matters is the sync: ConfigLib pushes the
+server's values to clients, which this mod does not do on its own. Clients render numbers derived
+from this config, so without it a retuned server has every client quoting ceilings that are not
+true there — the melting point cue included, which exists precisely so nobody has to guess.
+
+`[Category]`, `[Description]` and `[Range]` on `CrucibulumConfig` are the entire schema, since
+`RegisterCustomManagedConfig` reflects over the config object. They are BCL attributes and inert
+when ConfigLib is absent. A field added without them appears in the screen as a bare name.
+
+`tests/CompatConfigLib.cs` is the tripwire. Binding against a method name in a mod this one does
+not reference would fail silently if ConfigLib renamed or resignatured it — the mod would keep
+working and simply stop syncing. The tests assert the binding took, that the method still exists
+with its six parameters, and that every setting carries a description. They no-op without
+ConfigLib, so run them with it and `vsimgui` in the mod path:
+
+```bash
+cp configlib_*.zip vsimgui_*.zip ../crucibulum/Releases/crucibulum_*.zip /tmp/clmods/
+ssh <host> 'cd vstestkit-crucibulum && VSTK_EXTRA_MODS=/tmp/clmods bash scripts/boot.sh --client'
+ssh <host> 'cd vstestkit-crucibulum && bash scripts/run.sh ~/mods/crucibulum/tests --filter CompatConfigLib'
+```
+
+Verified against ConfigLib 1.12.0 (with vsimgui 1.2.7) on Vintage Story 1.22.
+
 ### Other forges
 
 The same patch shape works for any forge whose block entity derives from `BlockEntityForge`, as

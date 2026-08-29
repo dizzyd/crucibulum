@@ -249,6 +249,13 @@ firepit, which reads its ingredients from whatever heat source is holding it.
 | `EnableBlastGate` | whether a forge can be fitted with a gate at all |
 | `GateAirOpen`, `GateAirHalf`, `GateAirQuarter`, `GateAirShut` | what each notch does to the fire, as a share of full draught (1.0 / 0.85 / 0.7 / 0.55) |
 
+With [ConfigLib](https://mods.vintagestory.at/configlib) installed these appear on its settings
+screen, and — the part that matters more — the server's values sync to every client. Without it
+each side reads its own file, and since clients *display* numbers derived from this config (the
+block info, and the window's `Blast gate: half open — 1020°C`), a retuned server otherwise has
+everyone quoting ceilings that are not true there. ConfigLib is optional and is not required to
+build; nothing of it ships in the zip.
+
 The gate factors are the same lever a bellows works from the other side, so 1 is full draught and
 less is throttled. They are clamped to at most 1 — a plate over the air inlet cannot make a fire
 hotter than an open one — and held above zero, since shut is a banked fire rather than an airtight

@@ -54,6 +54,70 @@ public class CrucibulumModSystem : ModSystem
         // The forge blocktype is repointed at these by assets/crucibulum/patches/forge.json.
         api.RegisterBlockClass("CrucibulumForge", typeof(BlockCrucibulumForge));
         api.RegisterBlockEntityClass("CrucibulumForge", typeof(BlockEntityCrucibulumForge));
+
+        RegisterWithConfigLib(api);
+    }
+
+    private const string ConfigLibSystem = "ConfigLib.ConfigLibModSystem";
+    private const string ConfigLibRegister = "RegisterCustomManagedConfig";
+
+    /// <summary>Whether ConfigLib is installed and took the config. Asserted in a test.</summary>
+    public static bool ConfigLibBound { get; private set; }
+
+    /// <summary>
+    /// Hands <see cref="Config"/> to ConfigLib if it is installed.
+    ///
+    /// The visible half is an in-game settings screen. The half that matters more here is that
+    /// ConfigLib syncs the server's values to every client, which this mod does not do on its own -
+    /// each side reads its own ModConfig file. That is a real problem for this config in
+    /// particular, because clients *display* numbers derived from it: the block info and the
+    /// window's "Blast gate: half open - 1020C" line both come from CrucibleMaxTemperature, which
+    /// the tempature bonus and the four gate factors feed. Retune a server without this and every
+    /// client quotes ceilings that are not true there - including the melting point cue, which
+    /// exists precisely so nobody has to guess.
+    ///
+    /// Bound by reflection rather than a compile-time reference, so ConfigLib is optional when
+    /// building this as well as when running it, and nothing third-party lives in the repo or the
+    /// release zip. The surface is a single method, and RegisterCustomManagedConfig reflects over
+    /// the config object itself - so the [Category], [Description] and [Range] attributes on
+    /// CrucibulumConfig are the whole schema, and those are BCL attributes, inert when ConfigLib
+    /// is absent.
+    /// </summary>
+    private void RegisterWithConfigLib(ICoreAPI api)
+    {
+        var system = api.ModLoader.GetModSystem(ConfigLibSystem);
+        if (system == null) return;   // not installed, which is the ordinary case
+
+        var register = system.GetType().GetMethod(ConfigLibRegister);
+        if (register == null)
+        {
+            api.Logger.Warning("[crucibulum] configlib is installed but has no {0} - the forge's "
+                + "settings will not appear in its screen and will not sync from the server.",
+                ConfigLibRegister);
+            return;
+        }
+
+        try
+        {
+            register.Invoke(system, new object[]
+            {
+                "crucibulum",   // domain
+                Config,         // the object it reflects over
+                ConfigFile,     // reuse the file this mod already writes, so there is one source
+                null,           // onSyncedFromServer - everything is read live, nothing to rebuild
+                null,           // onSettingChanged
+                null,           // onConfigSaved
+            });
+
+            ConfigLibBound = true;
+        }
+        catch (Exception e)
+        {
+            // Reflection wraps whatever went wrong inside the call in a TargetInvocationException
+            // whose own message says nothing, so unwrap it or this is unactionable.
+            api.Logger.Warning("[crucibulum] could not hand the config to configlib: {0}",
+                (e as System.Reflection.TargetInvocationException)?.InnerException ?? e);
+        }
     }
 
     public override void StartServerSide(ICoreServerAPI api)

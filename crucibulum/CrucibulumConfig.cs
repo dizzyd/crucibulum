@@ -6,6 +6,9 @@
 // Software Foundation, either version 3 of the License, or (at your option) any
 // later version. See COPYING.LESSER, or <https://www.gnu.org/licenses/>.
 
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
+
 namespace Crucibulum;
 
 /// <summary>
@@ -19,6 +22,9 @@ public class CrucibulumConfig
     /// at 1100, lignite at 1000 and contaminated coal at 900 -- so fuel choice still decides which
     /// metals you can melt, but copper no longer needs a bellows.
     /// </summary>
+    [Category("Heat")]
+    [Description("Degrees a crucible adds to the forge's fuel ceiling.")]
+    [Range(0, 1200)]
     public int CrucibleTempBonus = 400;
 
     /// <summary>
@@ -26,11 +32,17 @@ public class CrucibulumConfig
     /// attribute", which vanilla ships as 1200 C. This is what keeps iron (1500 C) out of reach
     /// even with a bellows running.
     /// </summary>
+    [Category("Heat")]
+    [Description("Hard ceiling in degrees; 0 uses the crucible's own maxHeatableTemp.")]
+    [Range(0, 2000)]
     public int MaxCrucibleTemperature = 0;
 
     /// <summary>
     /// Multiplier on how fast the charge melts once it is up to temperature. 1 matches the firepit.
     /// </summary>
+    [Category("Melting")]
+    [Description("How fast a charge melts once hot enough; 1 matches the firepit.")]
+    [Range(0.1, 10)]
     public float MeltSpeedMultiplier = 1f;
 
     /// <summary>
@@ -47,6 +59,9 @@ public class CrucibulumConfig
     ///
     /// Set it to 0 to go back to the vanilla forge burn rate and the six-fold discount.
     /// </summary>
+    [Category("Fuel")]
+    [Description("Burn rate while working, against a firepit's per-second rate; 0 disables the correction.")]
+    [Range(0, 4)]
     public float CrucibleFuelUseVsFirepit = 0.6f;
 
     /// <summary>
@@ -57,6 +72,9 @@ public class CrucibulumConfig
     /// the melt did - one lump of coke lasts 190s against melting's 67s - and barely more than an
     /// empty forge's 240s.
     /// </summary>
+    [Category("Fuel")]
+    [Description("What holding a melt costs as a fraction of making one.")]
+    [Range(0.05, 2)]
     public float MoltenHoldFuelShare = 0.35f;
 
     /// <summary>
@@ -68,6 +86,9 @@ public class CrucibulumConfig
     /// longer, and a brim-full seven-ingot crucible takes over three times as long to reach
     /// temperature. Raise it to flatten the difference out.
     /// </summary>
+    [Category("Heat")]
+    [Description("The clay's own heat capacity in ingot-equivalents; sets how much charge size matters.")]
+    [Range(0.1, 20)]
     public float CrucibleThermalMass = 3f;
 
     /// <summary>
@@ -77,6 +98,9 @@ public class CrucibulumConfig
     /// is cold and eases in over the last stretch. 0.5 brings a cold crucible up in a coke forge in
     /// about two minutes; raise it to heat faster.
     /// </summary>
+    [Category("Heat")]
+    [Description("How briskly the crucible climbs towards the ceiling.")]
+    [Range(0.05, 5)]
     public float HeatRate = 0.5f;
 
     /// <summary>
@@ -84,6 +108,8 @@ public class CrucibulumConfig
     /// on full draught, which is vanilla's behaviour; gates already fitted stop throttling and can
     /// still be taken back out.
     /// </summary>
+    [Category("Blast gate")]
+    [Description("Whether a forge can be fitted with a blast gate at all.")]
     public bool EnableBlastGate = true;
 
     /// <summary>
@@ -100,8 +126,20 @@ public class CrucibulumConfig
     /// of most metals - vanilla counts metal workable at half its melting point. Moving these moves
     /// which metals can be held workable without melting.
     /// </summary>
+    [Category("Blast gate")]
+    [Description("Share of full draught with the gate open.")]
+    [Range(0.05, 1)]
     public float GateAirOpen = 1.00f;
+    [Category("Blast gate")]
+    [Description("Share of full draught with the gate half open.")]
+    [Range(0.05, 1)]
     public float GateAirHalf = 0.85f;
+    [Category("Blast gate")]
+    [Description("Share of full draught with the gate a quarter open.")]
+    [Range(0.05, 1)]
     public float GateAirQuarter = 0.70f;
+    [Category("Blast gate")]
+    [Description("Share of full draught with the gate shut.")]
+    [Range(0.05, 1)]
     public float GateAirShut = 0.55f;
 }
