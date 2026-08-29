@@ -200,9 +200,15 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
             return PutCrucible(slot, byPlayer, blockSel);
         }
 
-        // A bare forge with a gate: the click works the flap. Nothing is typed and no temperature is
-        // chosen - the plate moves a notch and the fire goes where the air puts it.
-        if (CrucibleStack == null && HasGate)
+        // The gate is worked by clicking the plate. Nothing is typed and no temperature is chosen -
+        // the plate moves a notch and the fire goes where the air puts it.
+        //
+        // On a bare forge that is the whole front of the block, since nothing else there wants the
+        // click. On a loaded one it is the plate itself and nothing more: a forge holding an ingot
+        // hands it back on a plain click, and taking that click for the gate left an ingot that
+        // could only be got out by pulling the whole plate off first.
+        if (HasGate && CrucibulumModSystem.Config.EnableBlastGate
+            && (WorkItemSlot.Empty || IsGateHit(blockSel?.HitPosition)))
         {
             CycleGate(byPlayer);
             return true;
@@ -489,9 +495,20 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         if (!HasGate) return;
 
         dsc.AppendLine(Lang.Get("crucibulum:forge-gate",
-            Lang.Get(BlastGate.LangKey(GatePosition)),
-            (int)(MaxTemperature * (1 + extraOxygenRate) * AirFactor)));
+            Lang.Get(BlastGate.LangKey(GatePosition)), (int)GateCeiling));
     }
+
+    /// <summary>
+    /// Where the fire ends up at this notch, for the forge as it is loaded now.
+    ///
+    /// A crucible is held above the fuel's own ceiling - that is what CrucibleTempBonus is for - so
+    /// the two are not the same number, and quoting the bare fuel figure at someone watching a
+    /// crucible was 340 degC out on coke at half open. The gate readout is only ever seen in the
+    /// crucible window, which is the one place the bare figure is certainly wrong.
+    /// </summary>
+    public float GateCeiling => CrucibleStack != null
+        ? CrucibleMaxTemperature()
+        : MaxTemperature * (1 + extraOxygenRate) * AirFactor;
 
     /// <summary>
     /// Why the charge will not melt. Blaming the fuel is only right when the fuel is the limit - a
@@ -550,6 +567,38 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         return true;
     }
 
+    /// <summary>How far up the front of the forge a click still counts as the plate.</summary>
+    public const double GateBandTop = 0.5;
+
+    /// <summary>How far out from the middle of the block the gate's face is; the plate is at 15/16.</summary>
+    private const double GateFaceDepth = 0.35;
+
+    /// <summary>
+    /// Whether a click landed on the plate rather than on the forge.
+    ///
+    /// The plate slides along one face, and the inlet behind it belongs to the same thing, so this
+    /// is the band both live in - the lower front of the block - rather than the plate's exact
+    /// voxels at its current notch. Above the band the forge is its hearth, and a click there is a
+    /// click for whatever is in the fire.
+    ///
+    /// The selection box is a plain cuboid in the blocktype and does not turn with the block, while
+    /// the plate is drawn into a mesh that does, so the hit has to be rotated back by MeshAngleRad
+    /// before it means anything.
+    /// </summary>
+    public bool IsGateHit(Vec3d hitPosition)
+    {
+        if (!HasGate || hitPosition == null) return false;
+        if (hitPosition.Y > GateBandTop) return false;
+
+        float c = GameMath.Cos(MeshAngleRad);
+        float s = GameMath.Sin(MeshAngleRad);
+        double x = hitPosition.X - 0.5;
+        double z = hitPosition.Z - 0.5;
+
+        // The mesh is rotated by +MeshAngleRad about the block centre, so this is that turn undone.
+        return s * x + c * z > GateFaceDepth;
+    }
+
     public void CycleGate(IPlayer byPlayer)
     {
         if (!HasGate) return;
@@ -566,15 +615,33 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
     /// virtual, so the ceiling cannot be lowered by overriding it. This listener runs after that
     /// one, so the metal is brought back down here instead - at the rate the fire would have heated
     /// it, rather than snapped, so a piece cooling to a damped setting takes the time it should.
+    ///
+    /// Both directions, because a damped forge is still a fire: a piece below the damped ceiling
+    /// climbs to it at vanilla's own rate. This method only ever brought metal *down* until the
+    /// ModDB report that an ingot in a throttled forge never heated at all.
     /// </summary>
     protected void ApplyGate(double hoursPassed)
     {
-        if (AirFactor >= 1f || !IsBurning) return;
-
         ItemStack work = WorkItemStack;
-        if (work == null || IsCrucible(work)) return;   // the crucible has its own ceiling
+        if (work == null || IsCrucible(work))   // the crucible has its own ceiling
+        {
+            gatedStack = null;
+            return;
+        }
 
         float stackTemp = work.Collectible.GetTemperature(Api.World, work);
+
+        // Full draught, or a dead fire, is vanilla's business again - but the shadow still follows
+        // the stack rather than being abandoned where it stood. Left holding a reading from minutes
+        // ago, the next click on the gate wrote that reading straight back over the metal: a piece
+        // brought up to heat with the gate open snapped back down to whatever it had been the last
+        // time the gate was closed.
+        if (AirFactor >= 1f || !IsBurning)
+        {
+            gatedStack = work;
+            gatedTemp = stackTemp;
+            return;
+        }
 
         // The same shadow HeatCrucible keeps, and for the same reason. Vanilla's tick drives the
         // work item at MaxTemperature every tick, about ten times harder than this pulls back, so
@@ -597,6 +664,17 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
             float step = (1 + GameMath.Clamp((gatedTemp - ceiling) / 30, 0, 1.6f)) * dt;
             gatedTemp = ApproachTemperature(gatedTemp, ceiling, step);
         }
+        else
+        {
+            // And it climbs, which for a long time it did not: the shadow only ever fell, so a
+            // damped forge pinned the metal at whatever it was holding and a cold ingot under a
+            // throttled gate simply never heated.
+            //
+            // At vanilla's own rate, which is what its tick would have done unthrottled, so a
+            // damped fire heats a piece exactly as it always did and only stops lower.
+            gatedTemp = Math.Min(ceiling,
+                gatedTemp + (float)(hoursPassed * VanillaForgeTempGainPerHour * (1 + extraOxygenRate)));
+        }
 
         // Written every tick, not only while the figure is still falling. Stopping once the shadow
         // settled on the ceiling left vanilla's tick free to drive the stack straight back up to
@@ -612,6 +690,13 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
     /// <summary>The work item temperature the gate is holding. See ApplyGate.</summary>
     protected float gatedTemp;
     protected ItemStack gatedStack;
+
+    /// <summary>
+    /// Degrees an in-game hour the vanilla forge tick adds to a work item, before the oxygen
+    /// multiplier. BlockEntityForge's own figure, kept here so a damped fire heats at the rate an
+    /// undamped one would rather than at some rate of this mod's invention.
+    /// </summary>
+    protected const double VanillaForgeTempGainPerHour = 1500;
 
     /// <summary>The ingot equivalent of one charge stack: what it would smelt down to.</summary>
     protected float IngotEquivalents(ItemStack stack)
@@ -1308,7 +1393,7 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
 
         tree.SetInt("haveGate", HasGate ? 1 : 0);
         tree.SetString("gatePositionKey", BlastGate.LangKey(GatePosition));
-        tree.SetInt("gateCeiling", (int)(MaxTemperature * (1 + extraOxygenRate) * AirFactor));
+        tree.SetInt("gateCeiling", (int)GateCeiling);
 
         tree.SetString("statusText", DialogStatusText(crucible));
     }

@@ -32,21 +32,30 @@ A forge is not set to a temperature, it is given air, and it settles wherever th
 draught put it — which is how vanilla already models it, since a bellows drives the ceiling up by
 a multiplier. A **blast gate** is that same lever below one.
 
-Fit any metal plate to a forge and it becomes the gate. Click the forge to slide it across, and
+Fit any metal plate to a forge and it becomes the gate. Click the plate to slide it across, and
 watch where the fire ends up:
 
-| gate | ceiling on coke | fuel |
-|---|---|---|
-| open | 1200 °C | vanilla rate |
-| half open | 1020 °C | slower |
-| a quarter open | 840 °C | slower still |
-| shut | 660 °C | about half |
+| gate | crucible on coke | ingot on coke | fuel |
+|---|---|---|---|
+| open | 1200 °C | 800 °C | vanilla rate |
+| half open | 1020 °C | 680 °C | slower |
+| a quarter open | 840 °C | 560 °C | slower still |
+| shut | 660 °C | 440 °C | about half |
+
+Two columns because a crucible is held above the fuel's own ceiling — that is what
+`CrucibleTempBonus` is for — and the readout quotes whichever applies to what the forge is
+holding.
 
 You never choose a number. You move a plate — visibly, on the front of the forge, so a glance
 across the workshop says how a fire is set — and the block info reports the consequence:
 `Blast gate: half open — 1020°C`. Less air also means less fuel burnt, so running cool is a trade
 rather than a free win. Shift-click with an empty hand takes the plate back, and a forge without
 one behaves exactly as it always did.
+
+The plate is what takes the click, not the whole block. A forge holding an ingot still hands it
+back on a plain click anywhere else on it, exactly as a vanilla forge does — so smithing at a
+gated forge is the same rhythm it always was. On a bare forge, where nothing else wants the click,
+anywhere on it works the gate.
 
 Metal already hotter than the damped fire cools down to it, which is the point: it makes a forge
 something you can hold a piece *at*, rather than only drive to the fuel's limit.

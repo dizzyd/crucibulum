@@ -424,6 +424,263 @@ namespace Crucibulum.Tests
             await Task.CompletedTask;
         }
 
+
+        /// <summary>
+        /// The report this suite was extended for: a gate on a forge holding an ingot rather than a
+        /// crucible. Every one of these failed against 1.1.0.
+        /// </summary>
+        static float WorkItemTemp() =>
+            Forge.WorkItemStack.Collectible.GetTemperature(Sapi.World, Forge.WorkItemStack);
+
+        static async Task Burn(int rounds)
+        {
+            for (int i = 0; i < rounds; i++)
+            {
+                await Hours(0.05);
+                await Ticks(10);
+            }
+        }
+
+        [VsTest(TimeoutMs = 180000)]
+        public async Task AColdIngotHeatsUnderAThrottledGate()
+        {
+            // ApplyGate's shadow only ever fell, so an ingot put into a damped forge was pinned at
+            // whatever it went in at and never heated at all - 95 degC against a 680 degC ceiling.
+            var be = await AForge();
+            be.FitGateForTesting(World.Stack("game:metalplate-copper"), GatePosition.Half);
+
+            var ingot = World.Stack("game:ingot-tinbronze");
+            be.WorkItemSlot.Itemstack = ingot;
+            ingot.Collectible.SetTemperature(Sapi.World, ingot, 20f);
+            be.MarkDirty(true);
+
+            float ceiling = be.MaxTemperature * BlastGate.AirFactor(GatePosition.Half);
+            await Burn(40);
+
+            float temp = WorkItemTemp();
+            Log($"  a cold ingot reached {temp:0} degC against a half-open ceiling of {ceiling:0}");
+            Assert.Greater(temp, ceiling - 60f, "a damped fire still heats the metal, it only stops lower");
+            Assert.Less(temp, ceiling + 60f, "and stops where the air puts it");
+        }
+
+        [VsTest(TimeoutMs = 240000)]
+        public async Task OpeningTheGateAgainLetsTheIngotClimbBack()
+        {
+            // The other half of the same bug, and the one the report described: with the shadow
+            // left stale while the gate was open, any restricted notch wrote a reading from minutes
+            // ago straight back over the metal and held it there.
+            var be = await AForge();
+            var ingot = World.Stack("game:ingot-tinbronze");
+            be.WorkItemSlot.Itemstack = ingot;
+            ingot.Collectible.SetTemperature(Sapi.World, ingot, 20f);
+            be.MarkDirty(true);
+
+            await Burn(20);
+            float open = WorkItemTemp();
+
+            be.FitGateForTesting(World.Stack("game:metalplate-copper"), GatePosition.Shut);
+            await Burn(30);
+            float shut = WorkItemTemp();
+
+            Forge.FitGateForTesting(World.Stack("game:metalplate-copper"), GatePosition.Half);
+            await Burn(30);
+            float half = WorkItemTemp();
+
+            float shutCeiling = be.MaxTemperature * BlastGate.AirFactor(GatePosition.Shut);
+            float halfCeiling = be.MaxTemperature * BlastGate.AirFactor(GatePosition.Half);
+            Log($"  open {open:0} -> shut {shut:0} (ceiling {shutCeiling:0}) -> half open {half:0} (ceiling {halfCeiling:0})");
+
+            Assert.Less(shut, shutCeiling + 60f, "shutting the gate brings the piece down");
+            Assert.Greater(half, shut + 50f, "and opening it a notch lets the fire climb again");
+        }
+
+        [VsTest(TimeoutMs = 120000)]
+        public async Task TheCeilingQuotedIsTheOneTheContentsAreHeldAt()
+        {
+            // A crucible is held above the fuel's own ceiling, so quoting the bare fuel figure at
+            // someone watching a crucible was 340 degC out on coke at half open - and the window is
+            // the only place that figure is ever seen.
+            var be = await AForge();
+            be.FitGateForTesting(World.Stack("game:metalplate-copper"), GatePosition.Half);
+            be.MarkDirty(true);
+            await Ticks(2);
+
+            float bare = Forge.GateCeiling;
+            Assert.Close(be.MaxTemperature * BlastGate.AirFactor(GatePosition.Half), bare, 1f,
+                "an empty forge quotes what the fuel and the air can do");
+
+            be.WorkItemSlot.Itemstack = World.Stack("game:crucible-brown-fired");
+            be.AddCharge(new DummySlot(World.Stack("game:nugget-nativecopper", 8)), 8);
+            be.MarkDirty(true);
+            await Ticks(2);
+
+            var tree = new Vintagestory.API.Datastructures.TreeAttribute();
+            Forge.SetDialogValues(tree);
+            var sb = new StringBuilder();
+            Forge.AppendGateInfo(sb);
+
+            Log($"  empty {bare:0} degC, with a crucible {Forge.GateCeiling:0} degC");
+            Log($"  block info: {sb.ToString().Trim()}");
+
+            Assert.Close(Forge.CrucibleMaxTemperature(), Forge.GateCeiling, 1f,
+                "with a crucible in, the figure is the one the crucible is actually held at");
+            Assert.Equal((int)Forge.CrucibleMaxTemperature(), tree.GetInt("gateCeiling"),
+                "and that is what the window's button is told");
+            Assert.Contains(sb.ToString(), ((int)Forge.CrucibleMaxTemperature()).ToString(),
+                "and what the block info says");
+        }
+
+        [VsTest]
+        public async Task ThePlateIsFoundWhicheverWayTheForgeFaces()
+        {
+            // The selection box is a plain cuboid in the blocktype and does not turn with the
+            // block, while the plate is drawn into a mesh that does - so a hit has to be rotated
+            // back before it can be compared with where the plate was drawn.
+            var be = await AForge(lit: false);
+            be.FitGateForTesting(World.Stack("game:metalplate-copper"), GatePosition.Open);
+
+            // The face the plate is on, in the block's own frame, and the three it is not.
+            var front = new Vec3d(0.5, 0.3, 0.94);
+            var back = new Vec3d(0.5, 0.3, 0.06);
+            var east = new Vec3d(0.94, 0.3, 0.5);
+            var west = new Vec3d(0.06, 0.3, 0.5);
+
+            foreach (var (angle, onThePlate) in new[]
+            {
+                (0f, front), (GameMath.PIHALF, east), (GameMath.PI, back), (3 * GameMath.PIHALF, west),
+            })
+            {
+                be.MeshAngleRad = angle;
+
+                Assert.True(be.IsGateHit(onThePlate), $"at {angle:0.00} rad the plate is where it is drawn");
+                foreach (var other in new[] { front, back, east, west })
+                {
+                    if (other == onThePlate) continue;
+                    Assert.False(be.IsGateHit(other), $"at {angle:0.00} rad it is not on the other faces");
+                }
+
+                // The hearth is the forge's, whichever way it faces.
+                Assert.False(be.IsGateHit(new Vec3d(onThePlate.X, 0.85, onThePlate.Z)),
+                    "and a click high on that same face is a click for what is in the fire");
+            }
+
+            be.MeshAngleRad = 0;
+            await Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// A forge standing on the floor rather than sunk into it.
+        ///
+        /// The plot's ground layer is the same layer P(x, 0, z) sits in, so a forge placed there is
+        /// flush with the floor around it: its front face - the one the plate is on - is buried
+        /// behind the neighbouring block and no ray can reach it. That is a property of the test
+        /// plot and not of the game, where a forge is set down on top of the ground, so these tests
+        /// build the scene a player would actually be standing at.
+        /// </summary>
+        static BlockPos StandingForgePos => P(8, 1, 8);
+
+        static BlockEntityCrucibulumForge StandingForge =>
+            World.BE<BlockEntityCrucibulumForge>(StandingForgePos);
+
+        static async Task<BlockEntityCrucibulumForge> AForgeOnTheFloor()
+        {
+            World.SetBlock("game:air", StandingForgePos);
+            await Ticks(1);
+            World.SetBlock("game:forge", StandingForgePos);
+            await Ticks(2);
+            return StandingForge;
+        }
+
+        static async Task EmptyHand()
+        {
+            Player.Me.InventoryManager.ActiveHotbarSlot.Itemstack = null;
+            Player.Me.InventoryManager.ActiveHotbarSlot.MarkDirty();
+            await Ticks(3);
+        }
+
+        /// <summary>Stands south of the forge, which is the side the plate is drawn on.</summary>
+        static async Task StandInFrontOfTheForge()
+        {
+            await Player.Teleport(new Vec3d(StandingForgePos.X + 0.5, StandingForgePos.Y, StandingForgePos.Z + 2.5));
+            await EmptyHand();
+        }
+
+        [VsTest(TimeoutMs = 120000), RequiresClient]
+        public async Task AClickOnThePlateWorksTheGate()
+        {
+            var be = await AForgeOnTheFloor();
+            be.FitGateForTesting(World.Stack("game:metalplate-copper"), GatePosition.Open);
+            be.WorkItemSlot.Itemstack = World.Stack("game:ingot-tinbronze");
+            be.MarkDirty(true);
+            await Ticks(20);
+
+            await StandInFrontOfTheForge();
+            var sel = await AimAtThePlate();
+            Log($"  aimed at {sel?.Position} {sel?.Face} hit y={sel?.HitPosition.Y:0.00} z={sel?.HitPosition.Z:0.00}");
+
+            await Input.Click(EnumMouseButton.Right, 3);
+            await Ticks(6);
+
+            Log($"  gate now {StandingForge.GatePosition}, forge still holds {StandingForge.WorkItemStack?.Collectible.Code.Path ?? "nothing"}");
+            Assert.Equal(GatePosition.Half, StandingForge.GatePosition, "clicking the plate slides it a notch");
+            Assert.NotNull(StandingForge.WorkItemStack, "and leaves the ingot in the fire");
+        }
+
+        [VsTest(TimeoutMs = 120000), RequiresClient]
+        public async Task AClickOnTheHearthStillHandsTheIngotBack()
+        {
+            // What the report was actually about: the gate swallowed this click, so an ingot could
+            // only be got out of a gated forge by taking the whole plate off first.
+            var be = await AForgeOnTheFloor();
+            be.FitGateForTesting(World.Stack("game:metalplate-copper"), GatePosition.Open);
+            be.WorkItemSlot.Itemstack = World.Stack("game:ingot-tinbronze");
+            be.MarkDirty(true);
+            await Ticks(20);
+
+            // From the same spot as the test above, so the only difference between them is where on
+            // the forge the click lands.
+            await StandInFrontOfTheForge();
+
+            await Interact.UseBlock(StandingForgePos, BlockFacing.UP);
+            await Ticks(6);
+
+            Log($"  work slot: {StandingForge.WorkItemStack?.Collectible.Code.Path ?? "empty"}, gate {StandingForge.GatePosition}");
+            Assert.True(StandingForge.WorkItemSlot.Empty, "a plain click hands the ingot back, as a vanilla forge does");
+            Assert.Equal(GatePosition.Open, StandingForge.GatePosition, "and does not touch the gate");
+        }
+
+        /// <summary>
+        /// Looks at the plate until the selection actually lands on it. The plate is a band low on
+        /// one face, and where a ray aimed at it comes down depends on how tall the player is and
+        /// how far away they are standing - so this walks the aim down the face rather than
+        /// assuming a single point works from wherever StandNear happened to put someone.
+        /// </summary>
+        static async Task<BlockSelection> AimAtThePlate()
+        {
+            BlockSelection sel = null;
+            for (double y = 0.45; y > 0.05; y -= 0.1)
+            {
+                await Interact.LookAt(new Vec3d(
+                    StandingForgePos.X + 0.5, StandingForgePos.Y + y, StandingForgePos.Z + 0.94));
+                await Ticks(Interact.AimSettleTicks);
+
+                sel = await ClientBlockSelection();
+                if (sel != null && sel.Position.Equals(StandingForgePos)
+                    && StandingForge.IsGateHit(sel.HitPosition)) return sel;
+            }
+
+            throw new AssertionException(
+                $"could not aim at the plate; ended up on {sel?.Position} {sel?.Face} at {sel?.HitPosition}");
+        }
+
+        static async Task<BlockSelection> ClientBlockSelection()
+        {
+            await OnClient();
+            var sel = Capi.World.Player.CurrentBlockSelection;
+            await OnServer();
+            return sel;
+        }
+
         [VsTest]
         public async Task TheNotchesComeFromTheConfig()
         {
