@@ -9,49 +9,49 @@ using static VsTestkit.Testing.Vs;
 namespace Crucibulum.Tests
 {
     /// <summary>
-    /// ConfigLib, if the player has it.
+    /// ConfigKit, if the player has it.
     ///
-    /// The settings screen is the visible half. The half that matters is that ConfigLib syncs the
+    /// The settings screen is the visible half. The half that matters is that ConfigKit syncs the
     /// server's values to clients, which this mod does not do on its own - and clients display
     /// numbers derived from this config, so without the sync a retuned server has everyone quoting
     /// ceilings that are not true there.
     ///
     /// The binding is by reflection, against a method name in a mod this one does not reference. If
-    /// ConfigLib renames or resignatures it, nothing here would notice: the mod would carry on
+    /// ConfigKit renames or resignatures it, nothing here would notice: the mod would carry on
     /// working and simply stop syncing, silently. That is what these are for.
     ///
-    /// They no-op when ConfigLib is not installed, which is the ordinary case. Run them with it in
+    /// They no-op when ConfigKit is not installed, which is the ordinary case. Run them with it in
     /// the mod path to mean anything - see docs/compat.md.
     /// </summary>
-    public class CompatConfigLib
+    public class CompatConfigKit
     {
         static bool Installed => Sapi.ModLoader.IsModEnabled("configkit");
 
         static bool Absent(string what)
         {
             if (Installed) return false;
-            Log($"  ConfigLib not installed - {what} not checked");
+            Log($"  ConfigKit not installed - {what} not checked");
             return true;
         }
 
         [VsTest]
-        public async Task TheConfigIsHandedToConfigLib()
+        public async Task TheConfigIsHandedToConfigKit()
         {
             if (Absent("the binding")) return;
 
             Assert.True(CrucibulumModSystem.ConfigKitBound,
-                "the config reached ConfigLib - if this is false the method was not found or threw, "
+                "the config reached ConfigKit - if this is false the method was not found or threw, "
                 + "and the server's settings will not sync to clients");
             await Task.CompletedTask;
         }
 
         [VsTest]
-        public async Task ConfigLibStillHasTheMethodWeCallByName()
+        public async Task ConfigKitStillHasTheMethodWeCallByName()
         {
             if (Absent("the method")) return;
 
-            var system = Sapi.ModLoader.GetModSystem("ConfigLib.ConfigLibModSystem");
-            Assert.NotNull(system, "ConfigLib.ConfigLibModSystem still exists under that name");
+            var system = Sapi.ModLoader.GetModSystem("ConfigKit.ConfigKitModSystem");
+            Assert.NotNull(system, "ConfigKit.ConfigKitModSystem still exists under that name");
 
             MethodInfo register = system.GetType().GetMethod("RegisterManagedConfig");
             Assert.NotNull(register, "RegisterManagedConfig still exists");
@@ -66,7 +66,7 @@ namespace Crucibulum.Tests
         [VsTest]
         public async Task EverySettingIsDescribedForTheScreen()
         {
-            // ConfigLib reflects over the config object, so these attributes are the entire schema.
+            // ConfigKit reflects over the config object, so these attributes are the entire schema.
             // A field added without them shows up in the screen as a bare name with no explanation.
             var undescribed = typeof(CrucibulumConfig)
                 .GetFields(BindingFlags.Public | BindingFlags.Instance)
