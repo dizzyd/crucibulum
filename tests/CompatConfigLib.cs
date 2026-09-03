@@ -25,7 +25,7 @@ namespace Crucibulum.Tests
     /// </summary>
     public class CompatConfigLib
     {
-        static bool Installed => Sapi.ModLoader.IsModEnabled("configlib");
+        static bool Installed => Sapi.ModLoader.IsModEnabled("configkit");
 
         static bool Absent(string what)
         {
@@ -39,7 +39,7 @@ namespace Crucibulum.Tests
         {
             if (Absent("the binding")) return;
 
-            Assert.True(CrucibulumModSystem.ConfigLibBound,
+            Assert.True(CrucibulumModSystem.ConfigKitBound,
                 "the config reached ConfigLib - if this is false the method was not found or threw, "
                 + "and the server's settings will not sync to clients");
             await Task.CompletedTask;
@@ -53,12 +53,12 @@ namespace Crucibulum.Tests
             var system = Sapi.ModLoader.GetModSystem("ConfigLib.ConfigLibModSystem");
             Assert.NotNull(system, "ConfigLib.ConfigLibModSystem still exists under that name");
 
-            MethodInfo register = system.GetType().GetMethod("RegisterCustomManagedConfig");
-            Assert.NotNull(register, "RegisterCustomManagedConfig still exists");
+            MethodInfo register = system.GetType().GetMethod("RegisterManagedConfig");
+            Assert.NotNull(register, "RegisterManagedConfig still exists");
 
             // Six arguments: domain, the config object, the file name, and three callbacks.
             var types = register.GetParameters().Select(p => p.ParameterType.Name).ToArray();
-            Log("  RegisterCustomManagedConfig(" + string.Join(", ", types) + ")");
+            Log("  RegisterManagedConfig(" + string.Join(", ", types) + ")");
             Assert.Equal(6, types.Length, "and still takes the six arguments this mod passes");
             await Task.CompletedTask;
         }

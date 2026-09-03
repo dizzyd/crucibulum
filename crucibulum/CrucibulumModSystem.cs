@@ -55,20 +55,20 @@ public class CrucibulumModSystem : ModSystem
         api.RegisterBlockClass("CrucibulumForge", typeof(BlockCrucibulumForge));
         api.RegisterBlockEntityClass("CrucibulumForge", typeof(BlockEntityCrucibulumForge));
 
-        RegisterWithConfigLib(api);
+        RegisterWithConfigKit(api);
     }
 
-    private const string ConfigLibSystem = "ConfigLib.ConfigLibModSystem";
-    private const string ConfigLibRegister = "RegisterCustomManagedConfig";
+    private const string ConfigKitSystem = "ConfigKit.ConfigKitModSystem";
+    private const string ConfigKitRegister = "RegisterManagedConfig";
 
-    /// <summary>Whether ConfigLib is installed and took the config. Asserted in a test.</summary>
-    public static bool ConfigLibBound { get; private set; }
+    /// <summary>Whether ConfigKit is installed and took the config. Asserted in a test.</summary>
+    public static bool ConfigKitBound { get; private set; }
 
     /// <summary>
-    /// Hands <see cref="Config"/> to ConfigLib if it is installed.
+    /// Hands <see cref="Config"/> to ConfigKit if it is installed.
     ///
     /// The visible half is an in-game settings screen. The half that matters more here is that
-    /// ConfigLib syncs the server's values to every client, which this mod does not do on its own -
+    /// ConfigKit syncs the server's values to every client, which this mod does not do on its own -
     /// each side reads its own ModConfig file. That is a real problem for this config in
     /// particular, because clients *display* numbers derived from it: the block info and the
     /// window's "Blast gate: half open - 1020C" line both come from CrucibleMaxTemperature, which
@@ -76,24 +76,24 @@ public class CrucibulumModSystem : ModSystem
     /// client quotes ceilings that are not true there - including the melting point cue, which
     /// exists precisely so nobody has to guess.
     ///
-    /// Bound by reflection rather than a compile-time reference, so ConfigLib is optional when
+    /// Bound by reflection rather than a compile-time reference, so ConfigKit is optional when
     /// building this as well as when running it, and nothing third-party lives in the repo or the
-    /// release zip. The surface is a single method, and RegisterCustomManagedConfig reflects over
+    /// release zip. The surface is a single method, and RegisterManagedConfig reflects over
     /// the config object itself - so the [Category], [Description] and [Range] attributes on
-    /// CrucibulumConfig are the whole schema, and those are BCL attributes, inert when ConfigLib
+    /// CrucibulumConfig are the whole schema, and those are BCL attributes, inert when ConfigKit
     /// is absent.
     /// </summary>
-    private void RegisterWithConfigLib(ICoreAPI api)
+    private void RegisterWithConfigKit(ICoreAPI api)
     {
-        var system = api.ModLoader.GetModSystem(ConfigLibSystem);
+        var system = api.ModLoader.GetModSystem(ConfigKitSystem);
         if (system == null) return;   // not installed, which is the ordinary case
 
-        var register = system.GetType().GetMethod(ConfigLibRegister);
+        var register = system.GetType().GetMethod(ConfigKitRegister);
         if (register == null)
         {
-            api.Logger.Warning("[crucibulum] configlib is installed but has no {0} - the forge's "
+            api.Logger.Warning("[crucibulum] ConfigKit is installed but has no {0} - the forge's "
                 + "settings will not appear in its screen and will not sync from the server.",
-                ConfigLibRegister);
+                ConfigKitRegister);
             return;
         }
 
@@ -109,13 +109,13 @@ public class CrucibulumModSystem : ModSystem
                 null,           // onConfigSaved
             });
 
-            ConfigLibBound = true;
+            ConfigKitBound = true;
         }
         catch (Exception e)
         {
             // Reflection wraps whatever went wrong inside the call in a TargetInvocationException
             // whose own message says nothing, so unwrap it or this is unactionable.
-            api.Logger.Warning("[crucibulum] could not hand the config to configlib: {0}",
+            api.Logger.Warning("[crucibulum] could not hand the config to ConfigKit: {0}",
                 (e as System.Reflection.TargetInvocationException)?.InnerException ?? e);
         }
     }
