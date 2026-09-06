@@ -257,6 +257,7 @@ firepit, which reads its ingredients from whatever heat source is holding it.
 | `HeatRate` | how briskly the crucible climbs; the curve eases in near the ceiling |
 | `MeltSpeedMultiplier` | 1 matches the firepit |
 | `EnableBlastGate` | whether a forge can be fitted with a gate at all |
+| `CrucibleOnlyInForge` | refuse crucibles at the firepit, so metal only melts in the forge (off) |
 | `GateAirOpen`, `GateAirHalf`, `GateAirQuarter`, `GateAirShut` | what each notch does to the fire, as a share of full draught (1.0 / 0.85 / 0.7 / 0.55) |
 
 With [ConfigLib](https://mods.vintagestory.at/configlib) installed these appear on its settings
@@ -271,12 +272,43 @@ less is throttled. They are clamped to at most 1 — a plate over the air inlet 
 hotter than an open one — and held above zero, since shut is a banked fire rather than an airtight
 one. Moving them moves which metals can be held workable without melting.
 
+### Melting only in the forge
+
+`CrucibleOnlyInForge` is for a world where the firepit cannot take a crucible at all, so every
+melt - and every reheat of a molten one - happens at a forge. It is off by default; vanilla's
+firepit keeps working and the forge is simply a second place to melt.
+
+Turned on, the firepit refuses a crucible on every way in: a click on the block, a drag into its
+window, a shift-click from the inventory. The firepit window opens instead, as it does for any
+other item that does not go in, and the crucible stays in hand. Only the crucible is refused - ore
+still lands in the input slot, where it sits exactly as it did before, since vanilla never smelted
+it without a container either way. Taking a crucible *out* is untouched, so one already sitting in
+a firepit when the switch is thrown comes out as it always did. The forge does not read the
+setting at all.
+
+It is read live: flip it in the config screen and it takes effect at once, with no restart. It is
+also the one thing in the mod that needs a Harmony patch - see below for why.
+
 ## How it hooks in
 
-Two JSON patches and no Harmony. The forge blocktype's `class` and `entityClass` are
-repointed at subclasses of `BlockForge` and `BlockEntityForge`, which is enough because
-`OnBlockInteractStart` is virtual and the vanilla forge already heats whatever is in its
-work item slot.
+Two JSON patches, and one Harmony patch that is inert unless asked for. The forge blocktype's
+`class` and `entityClass` are repointed at subclasses of `BlockForge` and `BlockEntityForge`,
+which is enough because `OnBlockInteractStart` is virtual and the vanilla forge already heats
+whatever is in its work item slot.
+
+The Harmony patch is `CrucibleOnlyInForge`, and it is Harmony because nothing else reaches the
+firepit: it accepts a crucible by C# class - `BlockFirepit.OnBlockInteractStart` tests
+`is BlockSmeltingContainer or BlockSmeltedContainer`, and `InventorySmelting.CanContain` says yes
+to its first three slots unconditionally - so there is no attribute a JSON patch could turn off.
+(Removing `cookingContainerSlots` from the crucible makes it *inert* in a firepit, but it still
+goes in, and a molten one still reheats there.) What every way in does share is the firepit
+inventory's accept methods, so three postfixes - `ItemSlotInput.CanTakeFrom`, `ItemSlotInput.CanHold`
+and `InventorySmelting.CanContain` - each `&&` in a refusal when the switch is on and the stack is
+a crucible. Removal goes through `CanTake`, which is left alone. Both sides are patched, since the
+client predicts a drag against its own copy of the inventory and a server-only patch would show the
+crucible landing and then snap back; the postfix is idempotent and reads the config on every call,
+so it is installed once for the process rather than once per side, which in singleplayer would be
+twice.
 
 The forge is a `BlockEntityContainer`, not a `BlockEntityOpenableContainer`, so none of the
 open/close/sync plumbing a window needs comes for free — it is written out in the block entity,
@@ -383,7 +415,7 @@ that a test run does not.
 
 ## Testing
 
-75 in-game tests under `tests/`, run against a real game with
+155 in-game tests under `tests/`, run against a real game with
 [vstestkit](../vstestkit):
 
 ```bash
@@ -404,7 +436,10 @@ packet reaching the server, the slot filters, and that the renderer builds its m
 throwing.
 
 Also checked: every lang key the code asks for resolves, the config loads with sane defaults, and
-the block info text is not rebuilt every frame.
+the block info text is not rebuilt every frame. `CrucibleOnlyInForge` is driven both ways on every
+path into a firepit - click, window drag, shift-click, fuel slot, a molten crucible back for
+reheating - plus the way out, the forge, ore in hand, a live flip, and that its Harmony postfixes
+are installed exactly once.
 
 **Not covered.** The renderer is smoke-tested, not pixel-tested — there are no visual baselines,
 so colours and placement were verified by eye. Two players opening the same window at once is

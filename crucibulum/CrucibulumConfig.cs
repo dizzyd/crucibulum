@@ -104,6 +104,22 @@ public class CrucibulumConfig
     public float HeatRate = 0.5f;
 
     /// <summary>
+    /// Whether a crucible is refused by the firepit, so the forge is the only place to melt.
+    ///
+    /// Off by default: vanilla's firepit keeps taking crucibles and this mod only adds the forge
+    /// as a second option. Turned on, every way of getting a crucible into a firepit - a click on
+    /// the block, a drag into its window, a shift-click from the inventory - is refused, and the
+    /// firepit window opens instead as it would for any other item. Taking one back out is not
+    /// touched, so a crucible already sitting in a firepit when this is switched on comes out as
+    /// it always did. Ore in hand is unaffected; it never smelted without a crucible anyway.
+    ///
+    /// Read live, so flipping it takes effect at once and needs no restart.
+    /// </summary>
+    [Category("Firepit")]
+    [Description("Refuse crucibles at the firepit, so metal only melts in the forge.")]
+    public bool CrucibleOnlyInForge = false;
+
+    /// <summary>
     /// Whether a forge can be fitted with a blast gate at all. Turning this off leaves every forge
     /// on full draught, which is vanilla's behaviour; gates already fitted stop throttling and can
     /// still be taken back out.

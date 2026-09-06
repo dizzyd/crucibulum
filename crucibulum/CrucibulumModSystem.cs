@@ -56,6 +56,10 @@ public class CrucibulumModSystem : ModSystem
         api.RegisterBlockEntityClass("CrucibulumForge", typeof(BlockEntityCrucibulumForge));
 
         RegisterWithConfigKit(api);
+
+        // The one Harmony patch in the mod. See FirepitCruciblePatch for why it is Harmony and
+        // why it is installed once for the process rather than once per side.
+        FirepitCruciblePatch.Install(api);
     }
 
     private const string ConfigKitSystem = "ConfigKit.ConfigKitModSystem";
