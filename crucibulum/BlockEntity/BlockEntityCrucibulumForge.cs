@@ -155,6 +155,8 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
 
         RegisterGameTickListener(OnCrucibleTick, 200);
 
+        if (api.Side == EnumAppSide.Server) inv.SlotModified += OnSlotModifiedServer;
+
         if (api is ICoreClientAPI capi)
         {
             capi.Event.RegisterRenderer(crucibleRenderer = new CrucibleRenderer(this, capi), EnumRenderStage.Opaque, "crucibulum-crucible");
@@ -244,10 +246,18 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         return true;
     }
 
-    /// <summary>Shift + empty hand lifts the crucible straight out, charge and all.</summary>
+    /// <summary>
+    /// Shift + empty hand lifts the crucible straight out, and the charge comes with it.
+    ///
+    /// The charge is handed back first, while the crucible is still in place, so that
+    /// <see cref="OnSlotModifiedServer"/> finds nothing left to deal with when the work slot
+    /// empties a moment later.
+    /// </summary>
     protected bool TakeCrucible(IPlayer byPlayer, BlockSelection blockSel)
     {
         if (CrucibleStack == null) return false;
+
+        TakeCharge(byPlayer);
 
         ItemStack stack = WorkItemSlot.TakeOutWhole();
         WorkItemSlot.MarkDirty();
@@ -267,6 +277,44 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         Api.World.PlaySoundAt(new AssetLocation("sounds/block/ingot"), Pos, 0.4375, byPlayer, true);
         MarkDirty(true);
         return true;
+    }
+
+    /// <summary>
+    /// The charge lives in the forge's own slots, not in the crucible stack, so a crucible that
+    /// leaves by any route other than <see cref="TakeCrucible"/> - dragged out through the window,
+    /// or swapped for an ingot there - would otherwise leave its ore behind in slots nobody can
+    /// see: the window only opens for a forge holding a crucible, so the ore sits invisible until
+    /// the next crucible goes in and silently inherits it. The firepit drops its cooking slots the
+    /// moment the container leaves; this does the same, except that it hands the ore to whoever
+    /// has the window open rather than tipping it onto the floor at their feet.
+    ///
+    /// Only the event path. DoSmelt assigns the slot directly, which raises nothing, and it
+    /// empties the charge itself - so a melt completing never comes through here.
+    /// </summary>
+    protected void OnSlotModifiedServer(int slotId)
+    {
+        if (slotId != 0 || CrucibleStack != null || ChargeEmpty) return;
+        TakeCharge(actingPlayer ?? WindowOpener());
+    }
+
+    /// <summary>
+    /// Whose inventory packet is being handled right now. Set for the duration of
+    /// <see cref="OnReceivedClientPacket"/>, so a slot change made through the window can be
+    /// traced to the player who made it - which the slot event itself does not say.
+    /// </summary>
+    protected IPlayer actingPlayer;
+
+    /// <summary>
+    /// A player with the window open, if anyone has. The fallback when no packet is in flight,
+    /// and an approximation if two players happen to have the same forge open at once.
+    /// </summary>
+    protected IPlayer WindowOpener()
+    {
+        foreach (IPlayer player in Api.World.AllOnlinePlayers)
+        {
+            if (player.InventoryManager?.HasInventory(Inventory) == true) return player;
+        }
+        return null;
     }
 
     /// <summary>A crucible is in place and has not already gone molten.</summary>
@@ -1351,7 +1399,15 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
 
         if (packetid < 1000)
         {
-            Inventory.InvNetworkUtil.HandleClientPacket(player, packetid, data);
+            actingPlayer = player;
+            try
+            {
+                Inventory.InvNetworkUtil.HandleClientPacket(player, packetid, data);
+            }
+            finally
+            {
+                actingPlayer = null;
+            }
             Api.World.BlockAccessor.GetChunkAtBlockPos(Pos).MarkModified();
 
             // A slot change can turn a valid alloy into an invalid one; the melt has to notice.

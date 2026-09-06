@@ -22,7 +22,7 @@ still wants a firepit, and iron is bloomery work as it always was.
 Using it
 Right-click the forge with a crucible to set it in, or shift-right-click — either works, as at
 a firepit. Right-click a forge that has a crucible in it to open the crucible window;
-shift-right-click with an empty hand to take the crucible back out. Ore and ingots go in through
+shift-right-click with an empty hand to take the crucible back out, and any ore in it comes back with it. Ore and ingots go in through
 the window, and fuel goes on the forge the way it always has.
 
 Smithing is untouched. A forge holding an ingot hands it over on a plain right-click exactly as

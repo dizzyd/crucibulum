@@ -18,10 +18,11 @@ Same gestures a firepit uses.
 | **Right click** a forge holding a crucible | open the crucible window |
 | **Right click** with a crucible | set it in the forge |
 | **Shift + right click** with a crucible | set it in the forge |
-| **Shift + right click**, empty handed | take the crucible back out |
+| **Shift + right click**, empty handed | take the crucible back out, ore and all |
 
 The window belongs to the crucible: take the crucible off the forge and it closes, rather than
-being left open over an empty slot.
+being left open over an empty slot. Whatever ore was in the crucible comes back with it, whether
+it left by shift-click or was dragged out of the window - it is not left sitting in the forge.
 
 Ore and ingots go in through the window, and fuel goes on the forge the way it always has.
 Shift is the crucible itself and nothing else.
