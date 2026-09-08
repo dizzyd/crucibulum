@@ -64,6 +64,101 @@ ssh <host> 'cd vstestkit-crucibulum && bash scripts/run.sh ~/mods/crucibulum/tes
 
 Verified against ChiselTools 1.17.6 on Vintage Story 1.22.
 
+## Smithing Plus
+
+[Smithing Plus](https://mods.vintagestory.at/smithingplus) hands a tool head back when a tool
+breaks. It is a plain vanilla `workitem-<metal>` carrying the recipe's voxels, eroded to
+`BrokenToolVoxelPercent` of them, and a `brokenCount` attribute; the mod's intended way to recover
+the metal is to chisel it into bits worth what is left. It has no smelting code of its own and does
+not touch combustible props, the firepit, or the crucible.
+
+It does not need to. A vanilla firepit crucible refuses a work item, and an ingot, and it does so
+by **size**: `InventoryBase.CanContain` compares an item's `size` against the container's
+`maxContentDimensions`, the fired crucible declares a mouth of 0.125 × 0.25 × 0.125, and a work
+item carries the collectible default of 0.5. The combustible props that would melt it into a
+whole ingot are never consulted. Nuggets are 0.0625 on a side and go in.
+
+This mod's charge slot mirrored the crucible's smelting rules and not its mouth, so until 1.4.0 the
+forge took all three, and a broken head melted into 100 units - which is the balance hole a
+Smithing Plus user reported. `ItemSlotCrucibleCharge.Fits` now applies the same limit the firepit
+does, read off the seated crucible's own attribute, so parity holds for any crucible from any mod
+that declares one. The two switches, `MeltIngots` and `MeltBrokenToolHeads`, are exemptions from
+that check and each admits only its own class. A broken head is recognised by the `brokenCount`
+attribute, on the stack or on the `repairedToolStack` it carries, read by name so nothing of
+theirs is referenced.
+
+`tests/ForgeChargeSize.cs` builds a head the way their `ItemDamagedPatches` does - voxels, recipe
+id, and the broken tool hung off it as `repairedToolStack` carrying the count - rather than
+borrowing theirs, so it runs without the mod and fails if the size rule ever stops holding at the
+forge. It was verified in-game first: against a bare 1.22.6 firepit holding a fired crucible, a
+nugget went in and an ingot, a work item and a broken head were each refused on the drag, the
+shift-click and the put.
+
+Their author's own view is in [issue 102](https://github.com/jayugg/SmithingPlus/issues/102): a
+mod that lets work items melt to 100 units is the problem, and the head should be chiselled.
+
+### The tripwire
+
+`tests/CompatSmithingPlus.cs` runs against their code rather than a copy of its output. A copper
+pickaxe is worn to its last point in the player's hand and broken under their `DamageItem`
+prefix, the work item they hand back is checked for the shape `ForgeChargeSize` assumes, and it is
+offered to the forge. The answer must match the config file the game booted with - the tests read
+the file and the live config and assert both agree - so a boot on the shipped file exercises the
+refusal and a boot with the switches on exercises the admission, which the in-process toggles in
+`ForgeChargeSize` cannot show. Their chisel-a-work-item recipe is checked to still be registered,
+since that is the path the refusal is protecting.
+
+They no-op without the mod. With it, and both boots:
+
+```bash
+cd ../vstestkit
+bash scripts/sync-linux.sh dizzyd@vsclient.home --mod ../crucibulum/crucibulum
+ssh <host> 'mkdir -p ~/mods/sp-compat && cp smithingplus_*.zip ~/mods/sp-compat/'
+
+# shipped config: refused
+ssh <host> 'cd vstestkit-crucibulum && bash scripts/run.sh mods/crucibulum/tests \
+    --mod mods/crucibulum/crucibulum --mods ~/mods/sp-compat --client --filter CompatSmithingPlus'
+
+# both switches on, through the file the first boot wrote: admitted
+ssh <host> 'cd vstestkit-crucibulum && f=run/crucibulum/data/ModConfig/crucibulum.json &&
+    sed -i "s/\"MeltIngots\": false/\"MeltIngots\": true/; s/\"MeltBrokenToolHeads\": false/\"MeltBrokenToolHeads\": true/" $f &&
+    VSTK_KEEP=1 bash scripts/run.sh mods/crucibulum/tests \
+    --mod mods/crucibulum/crucibulum --mods ~/mods/sp-compat --client --filter CompatSmithingPlus'
+```
+
+`VSTK_KEEP=1` is what carries the edited file into the second boot; without it the run directory
+is recreated and the shipped defaults come back. Verified against Smithing Plus 1.9.0-rc.1 on
+Vintage Story 1.22.6, both boots.
+
+### Their forge patch, and why the base is not called for a crucible
+
+Running the whole suite with them in the pack turned up a second thing, unrelated to melting.
+`ShowWorkablePatches` postfixes `BlockEntityForge.GetBlockInfo` to colour the temperature once the
+work item is workable, and to do that it asks the work item for its metal material. A vanilla
+forge only ever holds metal, so the lookup always succeeds and is cached. A crucible has none: the
+lookup fails, the failure is not cached, and the next call walks every smithing and grid recipe
+again. `GetBlockInfo` runs once a frame for whatever is being looked at.
+
+| work item in the forge | without Smithing Plus | with |
+|---|---|---|
+| ingot | 6.7 µs | 4.7 µs |
+| fired crucible, empty | 402 µs | **42,697 µs** |
+| crucible with a charge | 376 µs | 22,038 µs |
+
+Forty milliseconds a frame is a forge that drops the client to about twenty frames a second for
+as long as a crucible is looked at. The cause is on their side - a missing negative cache - but
+the trigger is this mod, since nothing else puts a non-metal work item in a forge. With the change
+below the empty-crucible call measures 79 µs with them in the pack and 47 µs without.
+
+`BlockEntityCrucibulumForge.GetBlockInfo` therefore calls the base only when the work item is not
+a crucible, and otherwise writes the base's four lines itself from the same Lang keys and the same
+public fields. A Harmony postfix on the base never runs for a crucible and still runs for every
+forge it was written for. `tests/ForgeBlockInfoPatches.cs` installs a counting postfix of its own
+and asserts exactly that: one call for a bare forge, one for an ingot, none for a crucible, and
+the contents and fuel lines present in all three. The cache test in `ForgeDialog` now measures its
+loop and allows rebuilds in proportion, so a slow postfix from some other mod fails it for being
+slow rather than for a cache that is working.
+
 ## Worlds that predate the mod
 
 The same patching that makes a forge ours only applies to forges placed from then on. A saved

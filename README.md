@@ -24,8 +24,8 @@ The window belongs to the crucible: take the crucible off the forge and it close
 being left open over an empty slot. Whatever ore was in the crucible comes back with it, whether
 it left by shift-click or was dragged out of the window - it is not left sitting in the forge.
 
-Ore and ingots go in through the window, and fuel goes on the forge the way it always has.
-Shift is the crucible itself and nothing else.
+Ore goes in through the window, and fuel goes on the forge the way it always has. Shift is the
+crucible itself and nothing else.
 
 ### Running the fire cooler
 
@@ -112,8 +112,8 @@ once something is actually melting, rather than sitting empty and looking stuck.
 
 What the window adds over the firepit's is the blend. The firepit shows you slots and then says *nothing at all* when a mix
 matches no alloy, which looks identical to a mix that does; here each metal's share is shown, on
-the same measure alloy recipes are written in — units of metal, not lumps, so twenty nuggets and
-one ingot both count as 100:
+the same measure alloy recipes are written in — units of metal, not lumps, so twenty nuggets of
+native copper count as 100:
 
 ```
 Copper 90% · Tin 10%
@@ -131,8 +131,14 @@ Tin bronze needs Tin 8-12%, Copper 88-92%
 If the metals make no alloy at all, it says they will not combine and quotes no ratio, rather
 than sending you after a recipe that does not exist.
 
-The slots filter what they will take — ore and ingots only — so the window cannot be used as a
-chest. There is no fuel slot: the forge is fuelled the way a forge has always been fuelled, by
+The slots filter what they will take, so the window cannot be used as a chest — and they take
+exactly what a firepit's crucible takes. That means ore and nuggets, and **not** ingots, work items
+or broken tool heads: a firepit refuses those by size, not by anything to do with smelting, since
+the crucible declares a mouth a nugget fits and an ingot does not. Versions before 1.4.0 missed
+that limit at the forge, and a tool worn to nothing came back as a whole ingot. `MeltIngots` and
+`MeltBrokenToolHeads` put either back, one class each, for a world that wants it.
+
+There is no fuel slot: the forge is fuelled the way a forge has always been fuelled, by
 shift-clicking coal onto it, and this window is only about what goes in the crucible.
 
 ### And the same thing in the block info
@@ -258,6 +264,8 @@ firepit, which reads its ingredients from whatever heat source is holding it.
 | `MeltSpeedMultiplier` | 1 matches the firepit |
 | `EnableBlastGate` | whether a forge can be fitted with a gate at all |
 | `CrucibleOnlyInForge` | refuse crucibles at the firepit, so metal only melts in the forge (off) |
+| `MeltIngots` | let ingots into the crucible, which a firepit refuses by size (off) |
+| `MeltBrokenToolHeads` | let a broken tool head in, for a whole ingot back; a firepit refuses it (off) |
 | `GateAirOpen`, `GateAirHalf`, `GateAirQuarter`, `GateAirShut` | what each notch does to the fire, as a share of full draught (1.0 / 0.85 / 0.7 / 0.55) |
 
 With [ConfigLib](https://mods.vintagestory.at/configlib) installed these appear on its settings

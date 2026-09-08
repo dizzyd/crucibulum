@@ -46,6 +46,37 @@ public class CrucibulumConfig
     public float MeltSpeedMultiplier = 1f;
 
     /// <summary>
+    /// Whether an ingot may go into the crucible.
+    ///
+    /// Off by default because a firepit's crucible refuses one: the fired crucible declares a mouth
+    /// of 0.125 x 0.25 x 0.125 and an ingot is the collectible default of 0.5, so the inventory
+    /// turns it away by size before smelting is ever asked. Versions before 1.4.0 did not apply that
+    /// limit at the forge and took ingots; this is for a world that liked it that way. It admits
+    /// ingots and nothing else - a work item is still refused.
+    ///
+    /// Read live, so flipping it takes effect at once and needs no restart.
+    /// </summary>
+    [Category("Melting")]
+    [Description("Let ingots into the crucible, which a firepit refuses by size.")]
+    public bool MeltIngots = false;
+
+    /// <summary>
+    /// Whether a broken tool head may go into the crucible, to come back as a whole ingot.
+    ///
+    /// Smithing Plus hands a head back when a tool breaks, as a plain work item marked with a
+    /// brokenCount, and means for it to be chiselled into bits worth what is left of it. Melting
+    /// it is refused at a firepit by the same size rule an ingot meets, and is refused here for the
+    /// same reason - a 100-unit ingot out of a tool that has been worn to nothing is what the
+    /// mod's balance rests on not happening. On, exactly that class of item is admitted: an
+    /// unfinished work item straight off the anvil still is not.
+    ///
+    /// Read live.
+    /// </summary>
+    [Category("Melting")]
+    [Description("Let broken tool heads into the crucible, for a whole ingot back; a firepit refuses them.")]
+    public bool MeltBrokenToolHeads = false;
+
+    /// <summary>
     /// How fast the forge burns while working a crucible, against the firepit's rate per second.
     ///
     /// The forge burns on the calendar and the firepit on the real clock, which left melting over
