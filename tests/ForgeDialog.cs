@@ -269,14 +269,24 @@ namespace Crucibulum.Tests
             Assert.Contains(sb.ToString(), "will not combine", "the text is the expensive one");
 
             int before = be.ChargeTextRebuilds;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             for (int i = 0; i < 200; i++)
             {
                 sb.Clear();
                 be.GetBlockInfo(null, sb);
             }
+            sw.Stop();
 
+            // The cache is a 200ms TTL, so what it may rebuild depends on how long the loop took -
+            // microseconds here, but another mod's postfix on the base can stretch a call to tens
+            // of milliseconds (Smithing Plus did, before the forge stopped calling the base for a
+            // crucible), and a fixed count then fails for a reason that is not the cache's.
             int rebuilds = be.ChargeTextRebuilds - before;
-            Assert.Less(rebuilds, 5, $"200 calls in a row rebuilt the text {rebuilds} times");
+            int elapsedMs = (int)sw.ElapsedMilliseconds;
+            int allowed = 2 + elapsedMs / 200;
+            Log($"  200 calls in {elapsedMs}ms rebuilt the text {rebuilds} times");
+            Assert.Less(rebuilds, allowed, $"200 calls in a row rebuilt the text {rebuilds} times over {elapsedMs}ms");
+            Assert.Less(elapsedMs, 2000, "and none of them was slow enough to matter at 60fps");
         }
 
         [VsTest]

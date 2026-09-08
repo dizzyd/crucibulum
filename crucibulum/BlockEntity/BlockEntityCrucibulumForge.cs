@@ -1593,9 +1593,16 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
 
     public override void GetBlockInfo(IPlayer forPlayer, StringBuilder dsc)
     {
-        base.GetBlockInfo(forPlayer, dsc);
-
         ItemStack crucible = CrucibleStack;
+
+        if (crucible == null)
+        {
+            base.GetBlockInfo(forPlayer, dsc);
+        }
+        else
+        {
+            VanillaBlockInfo(dsc);
+        }
 
         if (IsMoltenCrucible(crucible))
         {
@@ -1619,6 +1626,43 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         }
 
         dsc.Append(statusText);
+    }
+
+    /// <summary>
+    /// The four lines BlockEntityForge.GetBlockInfo writes - contents and temperature, fuel and
+    /// how long it lasts - written here rather than had from the base when the work item is a
+    /// crucible.
+    ///
+    /// The base is called once a frame for whatever the player is looking at, and other mods
+    /// postfix it on the assumption that a forge's work item is metal, because in vanilla it
+    /// always is. Smithing Plus's ShowWorkablePatches asks the work item for its metal material
+    /// to colour the temperature, and for a crucible there is none: the lookup fails, is not
+    /// cached as a failure, and walks every smithing and grid recipe again on the next frame.
+    /// Measured at 42ms a call against 0.4ms without them - a forge with a crucible in it took
+    /// the frame rate down to twenty or so for as long as it was looked at. Not calling the
+    /// patched method is the only defence this side of their code, and nothing is lost by it:
+    /// the crucible's own temperature line is written below, by this class, and the fuel lines
+    /// are the same two the base writes, from the same public fields.
+    ///
+    /// An ingot or a bare forge still goes through the base, so their patches see exactly what
+    /// they expect there - a metal work item, or none.
+    /// </summary>
+    protected void VanillaBlockInfo(StringBuilder dsc)
+    {
+        if (!WorkItemSlot.Empty)
+        {
+            int temp = (int)WorkItemStack.Collectible.GetTemperature(Api.World, WorkItemStack);
+            dsc.AppendLine(temp <= 25
+                ? Lang.Get("forge-contentsandtemp-cold", WorkItemStack.StackSize, WorkItemStack.GetName())
+                : Lang.Get("forge-contentsandtemp", WorkItemStack.StackSize, WorkItemStack.GetName(), temp));
+        }
+
+        if (!FuelSlot.Empty)
+        {
+            float oxygenBurnMul = 1 + extraOxygenRate;
+            dsc.AppendLine(Lang.Get("forge-fuel", FuelSlot.Itemstack.GetName()));
+            dsc.AppendLine(Lang.Get("forge-fuel-for-hour-amount", FuelLevel / oxygenBurnMul / BurnRate));
+        }
     }
 
     /// <summary>
