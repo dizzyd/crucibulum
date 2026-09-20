@@ -142,6 +142,11 @@ public class BlockCrucibulumForge : BlockForge
 
     public override bool OnBlockInteractStart(IWorldAccessor world, IPlayer byPlayer, BlockSelection blockSel)
     {
+        if (TryBlockBehaviors(world, byPlayer, blockSel, out bool behaviorResult))
+        {
+            return behaviorResult;
+        }
+
         if (world.BlockAccessor.GetBlockEntity(blockSel.Position) is BlockEntityCrucibulumForge be
             && be.OnPlayerInteractCrucible(world, byPlayer, blockSel))
         {
@@ -149,6 +154,46 @@ public class BlockCrucibulumForge : BlockForge
         }
 
         return base.OnBlockInteractStart(world, byPlayer, blockSel);
+    }
+
+    /// <summary>
+    /// Runs the block behaviours over the click, which is what Block.OnBlockInteractStart would
+    /// have done. BlockForge does not: it hands the click straight to its block entity and never
+    /// chains up, so every behaviour declared on a forge blocktype is deaf to a right click.
+    ///
+    /// On a vanilla forge that costs nothing visible, but ChiselTools' decorative forge keeps the
+    /// whole "put a chiselled block on it" gesture in a block behaviour, BBChiseledCover, and their
+    /// block class worked only because it called that behaviour by hand before deferring to the
+    /// forge. Replacing their class with this one therefore took the chiselling away - the forge
+    /// still worked as a forge, which is exactly how it was reported: it would not accept a
+    /// chiselled block.
+    ///
+    /// Restoring the engine's own contract rather than reaching for their behaviour by name, so any
+    /// other mod that hangs a behaviour on a forge gets its click too. Their cover behaviour claims
+    /// only game:chiseledblock and a wrench, so nothing a forge already does is at risk.
+    ///
+    /// Returns true when a behaviour claimed the click, with its answer in <paramref name="result"/>.
+    /// </summary>
+    private bool TryBlockBehaviors(IWorldAccessor world, IPlayer byPlayer, BlockSelection blockSel, out bool result)
+    {
+        result = true;
+        bool claimed = false;
+
+        foreach (BlockBehavior behavior in BlockBehaviors)
+        {
+            EnumHandling handled = EnumHandling.PassThrough;
+            bool behaviorResult = behavior.OnBlockInteractStart(world, byPlayer, blockSel, ref handled);
+
+            if (handled != EnumHandling.PassThrough)
+            {
+                result &= behaviorResult;
+                claimed = true;
+            }
+
+            if (handled == EnumHandling.PreventSubsequent) return true;
+        }
+
+        return claimed;
     }
 
     /// <summary>

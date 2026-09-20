@@ -22,6 +22,11 @@ namespace Crucibulum.Tests
     /// the class being swapped underneath them. Their block class adds only four small methods and
     /// their block entity one.
     ///
+    /// Surviving is not the same as being reached, though: BlockForge never runs the block
+    /// behaviour chain, so BBChiseledCover only ever got its click because their block class called
+    /// it by hand. BlockCrucibulumForge.TryBlockBehaviors restores that, and
+    /// AChiselledBlockGoesOnWithAClick is the test that would have caught it going missing.
+    ///
     /// These tests are the tripwire on that arrangement. If ChiselTools renames the blocktype, moves
     /// the cover back into the class, or renames the naming method, the patch silently stops
     /// applying or starts applying wrongly - and none of this mod's own tests would notice.
@@ -76,6 +81,9 @@ namespace Crucibulum.Tests
             World.SetBlock("game:air", scratch);
             return stack;
         }
+
+        static Vintagestory.API.Server.IServerPlayer ThePlayer =>
+            (Vintagestory.API.Server.IServerPlayer)Sapi.World.AllOnlinePlayers.First();
 
         static object CoverOf(BlockEntity be) =>
             be.Behaviors.FirstOrDefault(x => x.GetType().Name == "BEBChiseledCover");
@@ -133,6 +141,77 @@ namespace Crucibulum.Tests
 
             string[] blockBehaviors = be.Block.BlockBehaviors.Select(x => x.GetType().Name).ToArray();
             Assert.True(blockBehaviors.Contains("BBChiseledCover"), "and the block behaviour that applies a cover");
+        }
+
+        [VsTest, RequiresClient]   // TryAddCover takes the block out of a player's hand
+        public async Task AChiselledBlockGoesOnWithAClick()
+        {
+            if (Absent("applying a cover by clicking")) return;
+
+            // Every other test here reaches straight for BEBChiseledCover.SetShape, which is
+            // precisely why none of them noticed that the gesture that calls it had gone. Applying
+            // a cover lives in a block behaviour, and BlockForge.OnBlockInteractStart hands the
+            // click to its block entity without ever running the behaviour chain - so with our
+            // class on their forge, a chiselled block in hand did nothing at all. Reported by a
+            // player on 1.4.0: the decorative forge worked as a forge but refused the decoration.
+            //
+            // Driven through the block's own OnBlockInteractStart rather than a client click, so
+            // what is asserted is the dispatch that broke, with no inventory copy in the way.
+            var be = await AChiselledForge();
+            Assert.True(string.IsNullOrEmpty(CoverName(be)), "it starts bare");
+
+            ItemSlot hand = ThePlayer.InventoryManager.ActiveHotbarSlot;
+            hand.Itemstack = AChiselledGraniteBlock();
+            hand.MarkDirty();
+            await Ticks(1);
+
+            var sel = new BlockSelection { Position = ForgePos.Copy(), Face = BlockFacing.UP, HitPosition = new Vec3d(0.5, 0.875, 0.5) };
+            bool handled = be.Block.OnBlockInteractStart(Sapi.World, ThePlayer, sel);
+            await Ticks(2);
+
+            Log($"  after the click: handled={handled}, cover \"{CoverName(be)}\"");
+            Assert.True(handled, "the click was taken");
+            Assert.False(string.IsNullOrEmpty(CoverName(be)),
+                "the chiselled block went onto the forge - if this fails, BBChiseledCover is not "
+                + "being run and their decorative forge cannot be decorated");
+        }
+
+        [VsTest(TimeoutMs = 120000), RequiresClient]
+        public async Task APlayerCanClickAChiselledBlockOntoTheForge()
+        {
+            if (Absent("the gesture as a player performs it")) return;
+
+            // The same fix, reached the way it was reported: stand in front of the forge, hold a
+            // chiselled block, right-click it. AChiselledBlockGoesOnWithAClick drives the block's
+            // dispatch from the server; this one goes out through the client's own input, the
+            // selection raycast and the interaction packet, so it covers the whole path rather
+            // than the one method on it.
+            var be = await AChiselledForge();
+            Assert.True(string.IsNullOrEmpty(CoverName(be)), "it starts bare");
+
+            ItemSlot hand = ThePlayer.InventoryManager.ActiveHotbarSlot;
+            hand.Itemstack = AChiselledGraniteBlock();
+            hand.MarkDirty();
+            await Ticks(4);
+
+            // The client keeps its own copy of the inventory and the interaction begins there, so a
+            // stack written server-side without waiting for the sync drives an empty hand - and the
+            // failure then reads as "the forge refused it" when nothing was ever held.
+            await OnClient();
+            string held = Capi.World.Player.InventoryManager.ActiveHotbarSlot.Itemstack?.Collectible.Code.ToString();
+            await OnServer();
+            Log($"  the client is holding: {held}");
+            Assert.Equal("game:chiseledblock", held, "the client is really holding the chiselled block");
+
+            await Player.StandNear(ForgePos);
+            await Interact.UseBlock(ForgePos, BlockFacing.UP);
+            await Until(() => !string.IsNullOrEmpty(CoverName(be)), 60, "the cover to go on");
+
+            Log($"  cover after the click: \"{CoverName(be)}\"");
+
+            // A click the forge does not take falls through to placing what is held, so a
+            // regression here does not merely do nothing - it drops a chiselled block on the forge.
+            Assert.Equal(ChiselledForge, World.BlockCode(ForgePos), "the forge is still the forge");
         }
 
         [VsTest]

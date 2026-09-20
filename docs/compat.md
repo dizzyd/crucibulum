@@ -20,19 +20,46 @@ chiselling is not in their classes at all**:
 
 | | where it lives | survives the swap |
 |---|---|---|
-| applying a cover, wrench click | `BBChiseledCover` (block behaviour) | yes |
+| applying a cover, wrench click | `BBChiseledCover` (block behaviour) | attached, but not reached — see below |
 | cover mesh, persistence, drops, selection and collision boxes | `BEBChiseledCover` (block entity behaviour) | yes |
 | naming the forge after its cover | `BlockDecoForge.GetPlacedBlockName` | no — reimplemented |
-| deco interaction, break, tesselation wrappers | their two classes | no — behaviours cover it |
+| break and tesselation wrappers | their two classes | no — behaviours cover it |
+| calling the cover behaviour on a click | `BlockDecoForge.TryDecoInteract` | no — reimplemented |
 
 Behaviours are declared on the blocktype rather than the class, so they stay attached when the
-class underneath changes. What is actually lost is the five thin methods their two classes add,
-four of which have behaviour-level equivalents the engine calls anyway.
+class underneath changes — but staying attached is not the same as being called.
 
-The fifth is the block's name. `BlockCrucibulumForge.GetPlacedBlockName` asks their
-`BEBChiseledCover.GetChiseledName()` for it — by type and method name, since this mod does not
-reference theirs — and falls back to the ordinary block name when that lookup finds nothing, which
-is what an uncovered forge shows in any case.
+**`BlockForge` never runs the block behaviour chain.** Its `OnBlockInteractStart` hands the click
+to the block entity and returns, so `Block.OnBlockInteractStart` — the loop that gives every
+`BlockBehavior` on the blocktype a look at the click — is never reached. Their block class worked
+around that by calling `BBChiseledCover.TryAddCover` and `DoWrenchClick` by hand first, in
+`TryDecoInteract`. Put our class on their blocktype and both gestures are simply gone: the forge
+works as a forge and refuses a chiselled block, which is how a player reported it against 1.4.0.
+
+`BlockCrucibulumForge.TryBlockBehaviors` restores the engine's own loop ahead of the forge's
+handling, rather than reaching for their behaviour by name, so any other mod hanging a behaviour on
+a forge gets its click too. Two consequences worth knowing:
+
+- `BBChiseledCover` claims a click only for `game:chiseledblock` or a wrench, so nothing a forge
+  already does is at risk.
+- The vanilla forge blocktype declares `Lockable`, which vanilla's own class likewise never calls.
+  With the chain restored, a reinforced-and-locked forge now refuses interaction to players without
+  the key, where vanilla lets them use it regardless. That is what the blocktype asks for, but it
+  is a change to vanilla forges and not only to ChiselTools', so `tests/ForgeLockable.cs` pins both
+  directions: a stranger is refused, and the owner still gets in. The second is the one that would
+  hurt — a forge nobody can use looks exactly like a mod that ate someone's base.
+
+  Locking it against the test player is more roundabout than it looks. `IPlayer` carries an
+  `internal` member as of 1.22, so a stand-in player cannot be written outside their assembly; and
+  `getOrCreateReinforcmentsAt` deserializes the chunk's moddata on every call, so the object
+  `GetReinforcment` hands back is a copy and writing to it changes nothing. Their `TryLock` lays the
+  record down and only the owner is rewritten afterwards, which keeps the test clear of their index
+  and their format.
+
+The other thing their class had that ours needs is the block's name.
+`BlockCrucibulumForge.GetPlacedBlockName` asks their `BEBChiseledCover.GetChiseledName()` for it —
+by type and method name, since this mod does not reference theirs — and falls back to the ordinary
+block name when that lookup finds nothing, which is what an uncovered forge shows in any case.
 
 ### The tripwire
 
@@ -40,12 +67,20 @@ Patching another mod's asset by path is a coupling: if they rename the blocktype
 back into the class, or rename the naming method, the patch stops applying or starts applying
 wrongly, and nothing in this mod's own suite would notice.
 
-`tests/CompatChiselTools.cs` exists to fail loudly when that happens. Eight tests: four on a bare
-chiselled forge (the patch lands, both cover behaviours survive, the naming method still resolves,
-metal melts) and four on one with granite actually chiselled onto it - it keeps its cover and its
-name through `GetPlacedBlockName`, still melts, survives a save and reload, and hands the cover
-back when broken. The covered half is the half that matters: a bare chiselled forge is
-indistinguishable from a plain one, so testing only that proves nothing about their feature.
+`tests/CompatChiselTools.cs` exists to fail loudly when that happens. Ten tests: six on a bare
+chiselled forge (the patch lands, both cover behaviours survive, a chiselled block goes on with a
+click and again with a real one, the naming method still resolves, metal melts) and four on one
+with granite actually chiselled onto it - it keeps its cover and its name through
+`GetPlacedBlockName`, still melts, survives a save and reload, and hands the cover back when broken.
+The covered half is the half that matters: a bare chiselled forge is indistinguishable from a plain
+one, so testing only that proves nothing about their feature.
+
+Two of them go through the click rather than around it. `AChiselledBlockGoesOnWithAClick` calls
+`Block.OnBlockInteractStart` on the server, which is the dispatch that broke;
+`APlayerCanClickAChiselledBlockOntoTheForge` stands a player in front of the forge and right-clicks
+it, through the client's own input, selection raycast and interaction packet — the path it was
+reported on. The other eight reach straight for `BEBChiseledCover.SetShape`, which is exactly why
+the suite stayed green while the gesture that calls it was missing.
 
 The fixture builds a real cover the way the game does, converting a solid block in place and
 picking it up. Pass a name to `WasPlaced` - a null one is stored as a set-but-null `blockName` and
