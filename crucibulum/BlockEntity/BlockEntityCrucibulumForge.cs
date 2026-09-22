@@ -9,6 +9,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
@@ -406,19 +407,35 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
 
 
     /// <summary>
-    /// Draws the flap onto the forge.
+    /// Draws the forge, or whatever has been chiselled over it, and then the flap.
     ///
     /// Into the chunk mesh rather than through the per-frame renderer the crucible uses: a plate
     /// only moves when someone moves it, so it is static geometry and re-meshed on MarkDirty.
     ///
-    /// Two things have to be right. The base call draws the forge itself - and, on a ChiselTools
-    /// forge, the chiselled cover, which goes through the same path - so skipping it loses both.
-    /// And the forge turns to face whoever placed it, so the flap takes the same MeshAngleRad
-    /// rotation or it ends up on whichever wall happens to be south.
+    /// BlockEntityForge.OnTesselation draws the forge's own mesh and returns, never chaining to
+    /// BlockEntity.OnTesselation - the loop that lets a block entity behaviour draw. That is the
+    /// same deafness BlockForge has on a click, one layer down, and it costs the same feature:
+    /// ChiselTools keep their cover's mesh in BEBChiseledCover, and their BEDecoForge drew it by
+    /// hand. Restoring the loop is what puts a chiselled cover back on screen.
+    ///
+    /// A behaviour that draws the block replaces the forge's shape rather than being laid over it,
+    /// which is both what their class did and the only thing that looks right: a cover fills the
+    /// same cube, so drawing the forge underneath would leave the two fighting over every face.
+    ///
+    /// The flap goes on either way, and takes the forge's own MeshAngleRad, since the forge turns to
+    /// face whoever placed it and an unrotated flap ends up on whichever wall happens to be south.
+    ///
+    /// Drawn is not the same as seen: the flap sits against the forge's front face, so a cover
+    /// chiselled as a full cube swallows it whole, as it swallows the inlet. That is what covering
+    /// something in a solid block does, and carving the front voxels away is the thing ChiselTools
+    /// exists for. Aiming is unaffected either way - the selection box is still the forge's, since
+    /// their cover's own GetSelectionBoxes is never asked for on a forge - so a hidden gate still
+    /// takes the click that works it. ACoveredForgeStillWorksItsGate holds that.
     /// </summary>
     public override bool OnTesselation(ITerrainMeshPool mesher, ITesselatorAPI tessThreadTesselator)
     {
-        bool skipDefault = base.OnTesselation(mesher, tessThreadTesselator);
+        bool skipDefault = TesselateBehaviors(mesher, tessThreadTesselator)
+                           || base.OnTesselation(mesher, tessThreadTesselator);
 
         // The inlet first, sunk into the wall and never moving, then the flap over it. Without the
         // hole the plate reads as decoration bolted to the front, and an open gate reads as nothing
@@ -441,6 +458,22 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         }
 
         return skipDefault;
+    }
+
+    /// <summary>
+    /// Offers the mesh to the block entity behaviours, which is what BlockEntity.OnTesselation
+    /// would have done had BlockEntityForge chained to it. True if one of them drew the block.
+    /// </summary>
+    private bool TesselateBehaviors(ITerrainMeshPool mesher, ITesselatorAPI tessThreadTesselator)
+    {
+        bool drew = false;
+
+        for (int i = 0; i < Behaviors.Count; i++)
+        {
+            drew |= Behaviors[i].OnTesselation(mesher, tessThreadTesselator);
+        }
+
+        return drew;
     }
 
     /// <summary>
@@ -1412,12 +1445,32 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
 
             // A slot change can turn a valid alloy into an invalid one; the melt has to notice.
             MarkDirty();
+            return;
         }
+
+        // Not ours and not a slot: down to the behaviours, as BlockEntity.OnReceivedClientPacket
+        // would. Nothing on a forge sends one today, but a packet dropped on the floor is the same
+        // silence that cost ChiselTools their cover twice over.
+        base.OnReceivedClientPacket(player, packetid, data);
     }
 
+    /// <summary>
+    /// Anything that is not ours goes down to the block entity behaviours, which is what
+    /// BlockEntity.OnReceivedServerPacket does and what swallowing the packet costs.
+    ///
+    /// ChiselTools send one on a wrench click to tell the client to drop the cover it is drawing.
+    /// Their behaviour's FromTreeAttributes clears the stack but not the mesh built from it, so
+    /// that packet is the only thing that clears it - eat it and the client goes on drawing a
+    /// cover that is no longer there, which is the bug this mod already had in the other
+    /// direction.
+    /// </summary>
     public override void OnReceivedServerPacket(int packetid, byte[] data)
     {
-        if (packetid != (int)EnumBlockEntityPacketId.Close) return;
+        if (packetid != (int)EnumBlockEntityPacketId.Close)
+        {
+            base.OnReceivedServerPacket(packetid, data);
+            return;
+        }
 
         (Api.World as IClientWorldAccessor)?.Player.InventoryManager.CloseInventory(Inventory);
         clientDialog?.TryClose();
@@ -1526,7 +1579,11 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
 
     public override void FromTreeAttributes(ITreeAttribute tree, IWorldAccessor worldForResolving)
     {
+        ItemStack coverWas = ChiselledCoverStack();
+
         base.FromTreeAttributes(tree, worldForResolving);
+
+        RemeshChiselledCoverIfChanged(coverWas);
 
         meltProgress = tree.GetFloat("meltProgress");
         GatePosition = (GatePosition)tree.GetInt("gatePosition");
@@ -1604,6 +1661,8 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
             VanillaBlockInfo(dsc);
         }
 
+        BehaviorBlockInfo(forPlayer, dsc);
+
         if (IsMoltenCrucible(crucible))
         {
             var contents = ((BlockSmeltedContainer)crucible.Collectible).GetContents(Api.World, crucible);
@@ -1626,6 +1685,119 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         }
 
         dsc.Append(statusText);
+    }
+
+    #region ChiselTools' cover mesh
+
+    // Reached by type, property and method name, because this mod does not reference theirs. Each
+    // lookup is cached against the behaviour type and fails to "do nothing", which is what any
+    // forge without their mod does anyway - see docs/compat.md.
+    private const string CoverBehavior = "BEBChiseledCover";
+    private const string CoverStackProperty = "ChiseledItemStack";
+    private const string CoverRemeshMethod = "GenMesh";
+
+    private static PropertyInfo coverStack;
+    private static MethodInfo coverRemesh;
+    private static Type coverOwner;
+
+    private BlockEntityBehavior ChiselledCover()
+    {
+        if (Behaviors == null) return null;
+
+        for (int i = 0; i < Behaviors.Count; i++)
+        {
+            BlockEntityBehavior beh = Behaviors[i];
+            Type t = beh.GetType();
+            if (t.Name != CoverBehavior) continue;
+
+            if (!ReferenceEquals(t, coverOwner))
+            {
+                coverOwner = t;
+                coverStack = t.GetProperty(CoverStackProperty);
+                coverRemesh = t.GetMethod(CoverRemeshMethod, Type.EmptyTypes);
+            }
+
+            return beh;
+        }
+
+        return null;
+    }
+
+    private ItemStack ChiselledCoverStack()
+    {
+        if (Api?.Side != EnumAppSide.Client) return null;
+
+        BlockEntityBehavior beh = ChiselledCover();
+        if (beh == null || coverStack == null) return null;
+
+        try
+        {
+            return coverStack.GetValue(beh) as ItemStack;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds ChiselTools' cover mesh when the cover the server sent is not the one the client
+    /// last drew.
+    ///
+    /// Their behaviour caches the mesh it built, and clears that cache whenever its own code runs -
+    /// SetShape, GenMesh, DumpInventory. What does not clear it is arriving data: their
+    /// FromTreeAttributes replaces the stack and leaves the mesh alone. A client that applies a
+    /// cover itself is therefore fine, because it runs SetShape locally on the way past; a client
+    /// that only receives the change is not, and a replacement sends it no reset packet the way a
+    /// wrench removal does. That is every player in the world except the one holding the chisel.
+    ///
+    /// Compared rather than rebuilt unconditionally: this runs on every tree the forge receives,
+    /// which while metal is melting is a great many, and building a microblock mesh is not free.
+    /// </summary>
+    private void RemeshChiselledCoverIfChanged(ItemStack was)
+    {
+        if (Api?.Side != EnumAppSide.Client) return;
+
+        ItemStack now = ChiselledCoverStack();
+
+        bool changed = (was == null) != (now == null)
+                       || (was != null && !was.Equals(Api.World, now));
+        if (!changed) return;
+
+        BlockEntityBehavior beh = ChiselledCover();
+        if (beh == null || coverRemesh == null) return;
+
+        try
+        {
+            coverRemesh.Invoke(beh, null);
+        }
+        catch (Exception)
+        {
+            // Their mesh is their business; a forge that cannot rebuild it still works as a forge.
+        }
+    }
+
+    #endregion
+
+    /// <summary>
+    /// The block entity behaviours' own lines, which BlockEntityForge.GetBlockInfo leaves out: it
+    /// writes the forge's four and returns, never chaining to BlockEntity.GetBlockInfo. That is the
+    /// third place a forge is deaf to its behaviours, after the click and the mesh.
+    ///
+    /// Nothing on a vanilla forge writes any - its one entity behaviour, TemperatureSensitive, has
+    /// no GetBlockInfo - so this shows up only on a modded forge. ChiselTools use theirs to say a
+    /// cover's shape has been locked, and a lock with no notice is a trap this mod opened itself by
+    /// making the wrench click reachable again: the wrench then refuses to take the cover off and
+    /// nothing anywhere says why.
+    ///
+    /// Written here rather than at the end because the crucible branches below return early.
+    /// </summary>
+    private void BehaviorBlockInfo(IPlayer forPlayer, StringBuilder dsc)
+    {
+        for (int i = 0; i < Behaviors.Count; i++)
+        {
+            Behaviors[i].GetBlockInfo(forPlayer, dsc);
+        }
     }
 
     /// <summary>

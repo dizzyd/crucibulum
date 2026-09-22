@@ -21,13 +21,43 @@ chiselling is not in their classes at all**:
 | | where it lives | survives the swap |
 |---|---|---|
 | applying a cover, wrench click | `BBChiseledCover` (block behaviour) | attached, but not reached — see below |
-| cover mesh, persistence, drops, selection and collision boxes | `BEBChiseledCover` (block entity behaviour) | yes |
+| cover persistence, drops, selection and collision boxes | `BEBChiseledCover` (block entity behaviour) | yes |
+| the cover's mesh | `BEBChiseledCover.OnTesselation` | attached, but not reached — see below |
 | naming the forge after its cover | `BlockDecoForge.GetPlacedBlockName` | no — reimplemented |
-| break and tesselation wrappers | their two classes | no — behaviours cover it |
+| break wrapper | `BlockDecoForge.OnBlockBroken` | no — the behaviour covers it |
 | calling the cover behaviour on a click | `BlockDecoForge.TryDecoInteract` | no — reimplemented |
+| drawing the cover instead of the forge | `BEDecoForge.OnTesselation` | no — reimplemented |
 
 Behaviours are declared on the blocktype rather than the class, so they stay attached when the
-class underneath changes — but staying attached is not the same as being called.
+class underneath changes — but staying attached is not the same as being called, and **a forge is
+deaf to its behaviours in four places**. Three are vanilla's and one was this mod's own, and the
+first two were each found by a player rather than by this suite — which is why the other two were
+gone looking for rather than waited on.
+
+| chain | swallowed by | what it cost ChiselTools |
+|---|---|---|
+| `Block.OnBlockInteractStart` → `BlockBehaviors` | vanilla `BlockForge` | no cover could be applied, no wrench click |
+| `BlockEntity.OnTesselation` → `Behaviors` | vanilla `BlockEntityForge` | a cover was kept but never drawn |
+| `BlockEntity.GetBlockInfo` → `Behaviors` | vanilla `BlockEntityForge` | a locked shape said nothing |
+| `BlockEntity.OnReceivedServerPacket` → `Behaviors` | **this mod** | a removed cover went on being drawn |
+
+Restoring a chain is not the end of it, either. ChiselTools cache the mesh they build from a cover,
+and clear that cache whenever their own code runs — `SetShape`, `GenMesh`, `DumpInventory`. What
+does not clear it is *arriving data*: their `FromTreeAttributes` takes the new stack and leaves the
+mesh alone, and a replacement broadcasts no reset packet the way a wrench removal does. A client
+that applies a cover itself is fine, because it runs `SetShape` locally on the way past. A client
+that only receives the change goes on drawing the cover that was replaced — which is every player
+in the world except the one holding the chisel, and so invisible to hands-on testing.
+`RemeshChiselledCoverIfChanged` compares the cover before and after each tree and calls their
+`GenMesh` when it moved — compared rather than rebuilt unconditionally, because a melting forge
+sends a great many trees and building a microblock mesh is not free.
+
+The audit that found the last two is worth repeating on any vanilla class this mod replaces: list
+the overrides, check each for a `base` call, and check what the base would have done. The whole
+block side chains properly — `BlockForge` swallows only `OnBlockInteractStart` — and on the block
+entity side `BlockEntityForge` swallows exactly `GetBlockInfo` and `OnTesselation`. Restoring all
+four costs a plain forge nothing: its one entity behaviour, `TemperatureSensitive`, overrides only
+`Initialize`.
 
 **`BlockForge` never runs the block behaviour chain.** Its `OnBlockInteractStart` hands the click
 to the block entity and returns, so `Block.OnBlockInteractStart` — the loop that gives every
@@ -36,12 +66,57 @@ around that by calling `BBChiseledCover.TryAddCover` and `DoWrenchClick` by hand
 `TryDecoInteract`. Put our class on their blocktype and both gestures are simply gone: the forge
 works as a forge and refuses a chiselled block, which is how a player reported it against 1.4.0.
 
+**`BlockEntityForge` never runs the block entity behaviour chain either.** Its `OnTesselation`
+draws the forge's own mesh and returns `true`, so `BlockEntity.OnTesselation` — the loop that lets
+a `BlockEntityBehavior` draw — is never reached, and `BEBChiseledCover.OnTesselation` is where the
+cover's mesh comes from. `BEDecoForge` existed to do that by hand. Fixing only the click left 1.4.1
+in a state the same player reported straight back: the forge took the chiselled block, kept it, and
+looked no different, so covers could be cycled in and out invisibly.
+
+**`BlockEntityForge.GetBlockInfo` writes the forge's four lines and returns**, so a behaviour's
+own lines never appear. ChiselTools use theirs to say a cover's shape has been locked — and since
+ctrl-wrench locking only became reachable again when the click chain was restored, leaving this one
+alone would have meant a wrench that silently refuses to work with nothing anywhere saying why.
+`BehaviorBlockInfo` writes them, before the crucible lines because those branches return early.
+
+**This mod swallowed the packet chain itself.** `OnReceivedServerPacket` returned early on anything
+that was not its own dialog-close, and ChiselTools broadcast packet `32322` on a wrench click to
+tell the client to drop the mesh it is drawing. Their `FromTreeAttributes` clears the cover's
+*stack* but not the `meshdata` built from it, so that packet is the only thing that clears the
+mesh: without it the client went on drawing a cover that had already been dropped on the floor —
+1.4.1's bug in a mirror. `OnReceivedClientPacket` had the same hole and now chains too, though
+nothing on a forge sends one today.
+
+`BlockEntityCrucibulumForge.TesselateBehaviors` restores the second loop the way
+`BlockCrucibulumForge.TryBlockBehaviors` restores the first. A behaviour that draws the block
+*replaces* the forge's own mesh rather than being laid over it — which is what `BEDecoForge` did,
+and the only thing that looks right, since a cover fills the same cube and drawing both leaves the
+two fighting over every face. The blast gate goes on either way: it is hardware rather than
+decoration and has to stay visible to be aimed at.
+
 `BlockCrucibulumForge.TryBlockBehaviors` restores the engine's own loop ahead of the forge's
 handling, rather than reaching for their behaviour by name, so any other mod hanging a behaviour on
 a forge gets its click too. Two consequences worth knowing:
 
 - `BBChiseledCover` claims a click only for `game:chiseledblock` or a wrench, so nothing a forge
   already does is at risk.
+
+### What a cover hides
+
+A cover is drawn *instead of* the forge and fills the whole block, so a cover chiselled as a full
+cube swallows the blast gate and its inlet — confirmed by eye, not reasoned about. Carving the
+front voxels away is the remedy, and it is the thing ChiselTools exists for.
+
+Nothing functional goes with it. The selection box is still the forge's, because their cover's
+`GetSelectionBoxes` is never asked for on a forge — neither `BlockDecoForge` nor this mod's block
+class calls it — so a hidden gate still takes the click that works it, and
+`ACoveredForgeStillWorksItsGate` holds that, and `APlayerCanWorkAGateThroughACover` holds it
+through the client's own raycast rather than a hit position of the test's choosing — the distinction
+that matters here, since the cover is drawn `0–1` while the box stays the forge's inset one, so what
+the player sees and what the ray hits are no longer the same solid. Pushing the gate mesh clear of the cover was
+considered and rejected: there is no offset that is right for an arbitrary chiselled shape, and
+anything past `z = 1` sits in the neighbouring block while the selection box stays where it was,
+which trades a cosmetic surprise for a real one.
 - The vanilla forge blocktype declares `Lockable`, which vanilla's own class likewise never calls.
   With the chain restored, a reinforced-and-locked forge now refuses interaction to players without
   the key, where vanilla lets them use it regardless. That is what the blocktype asks for, but it
@@ -67,11 +142,14 @@ Patching another mod's asset by path is a coupling: if they rename the blocktype
 back into the class, or rename the naming method, the patch stops applying or starts applying
 wrongly, and nothing in this mod's own suite would notice.
 
-`tests/CompatChiselTools.cs` exists to fail loudly when that happens. Ten tests: six on a bare
+`tests/CompatChiselTools.cs` exists to fail loudly when that happens. Eighteen tests: seven on a bare
 chiselled forge (the patch lands, both cover behaviours survive, a chiselled block goes on with a
-click and again with a real one, the naming method still resolves, metal melts) and four on one
-with granite actually chiselled onto it - it keeps its cover and its name through
-`GetPlacedBlockName`, still melts, survives a save and reload, and hands the cover back when broken.
+click and again with a real one, it still draws as a forge, the naming method still resolves, metal
+melts) and eleven on one with granite actually chiselled onto it - it keeps its cover and its name through
+`GetPlacedBlockName`, draws that cover instead of the forge, redraws when the cover is
+replaced under it, gives it back to a wrench and stops drawing it, names itself in the block info
+once its shape is locked, still works its blast gate, still melts, survives a save and reload, and
+hands the cover back when broken.
 The covered half is the half that matters: a bare chiselled forge is indistinguishable from a plain
 one, so testing only that proves nothing about their feature.
 
@@ -81,6 +159,14 @@ Two of them go through the click rather than around it. `AChiselledBlockGoesOnWi
 it, through the client's own input, selection raycast and interaction packet — the path it was
 reported on. The other eight reach straight for `BEBChiseledCover.SetShape`, which is exactly why
 the suite stayed green while the gesture that calls it was missing.
+
+Two more ask what is actually drawn, which is the gap 1.4.1 fell into: a cover is kept on the block
+entity whether or not anything renders it, so ten tests can pass over a forge that looks bare.
+`ACoveredForgeDrawsTheCoverAndNotTheForge` hands the client's block entity a recording
+`ITerrainMeshPool` and asserts the cover's own `MeshData` reached it and the plain forge mesh did
+not; `AnUncoveredChiselledForgeStillDrawsAsAForge` is the other half, that restoring the chain has
+not cost a bare forge its shape. Both compare by reference — each mesh is a singleton its owner
+hands out — so "this mesh, not that one" is answerable rather than approximate.
 
 The fixture builds a real cover the way the game does, converting a solid block in place and
 picking it up. Pass a name to `WasPlaced` - a null one is stored as a set-but-null `blockName` and
@@ -97,7 +183,7 @@ ssh <host> 'cd vstestkit-crucibulum && VSTK_EXTRA_MODS=/tmp/compat bash scripts/
 ssh <host> 'cd vstestkit-crucibulum && bash scripts/run.sh ~/mods/crucibulum/tests --filter CompatChiselTools'
 ```
 
-Verified against ChiselTools 1.17.6 on Vintage Story 1.22.
+Verified against ChiselTools 1.17.7 on Vintage Story 1.22.7.
 
 ## Smithing Plus
 
