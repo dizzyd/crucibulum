@@ -138,6 +138,10 @@ the crucible declares a mouth a nugget fits and an ingot does not. Versions befo
 that limit at the forge, and a tool worn to nothing came back as a whole ingot. `MeltIngots` and
 `MeltBrokenToolHeads` put either back, one class each, for a world that wants it.
 
+The slots also want a fired crucible actually sitting in the forge: 1.4.0 through 1.4.2 measured the
+mouth of whatever was in the work slot, which let an ingot in while the crucible was on the cursor
+or had already run molten, whatever the two switches said.
+
 There is no fuel slot: the forge is fuelled the way a forge has always been fuelled, by
 shift-clicking coal onto it, and this window is only about what goes in the crucible.
 

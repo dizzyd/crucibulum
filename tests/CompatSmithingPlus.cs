@@ -109,7 +109,7 @@ namespace Crucibulum.Tests
 
             Assert.True(head.Collectible is ItemWorkItem, "it is a vanilla work item");
             Assert.True(ItemSlotCrucibleCharge.Accepts(head), "which the crucible would melt");
-            // The raw geometry, not Fits - that answer depends on the switch this boot was given.
+            // The raw geometry, not FitsMouth - that answer depends on the switch this boot was given.
             Size3f mouth = World.Stack("game:crucible-brown-fired").ItemAttributes["maxContentDimensions"].AsObject<Size3f>(null);
             Assert.False(mouth.CanContain(head.Collectible.Dimensions), "but it does not fit the crucible's mouth");
             Assert.True(ItemSlotCrucibleCharge.IsBrokenToolHead(head), "and we read it as a broken head");

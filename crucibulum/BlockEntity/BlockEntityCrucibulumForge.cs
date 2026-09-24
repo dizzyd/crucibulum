@@ -318,8 +318,14 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         return null;
     }
 
-    /// <summary>A crucible is in place and has not already gone molten.</summary>
-    public bool CanAcceptCharge => CrucibleStack != null && !IsMoltenCrucible(CrucibleStack);
+    /// <summary>
+    /// A crucible is in place and has not already gone molten.
+    ///
+    /// The charge slots' own rule, asked here rather than restated: this used to be a second copy
+    /// of it that nothing consulted, so it went on reading true while the slots let an ingot in
+    /// behind it.
+    /// </summary>
+    public bool CanAcceptCharge => ItemSlotCrucibleCharge.IsFiredCrucible(WorkItemStack);
 
     /// <summary>
     /// Moves one crucible from a slot into the forge. False if the forge is already holding
@@ -334,25 +340,6 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         fromSlot.MarkDirty();
         MarkDirty(true);
         return true;
-    }
-
-    /// <summary>
-    /// Mirrors the vanilla crucible's own slot filter: storageType 4 (Metallurgy) plus something
-    /// that actually melts and needs a container to do it. Deliberately rejects anything the forge
-    /// would rather burn, so coal keeps going to the fuel slot.
-    /// </summary>
-    public bool IsCrucibleCharge(ItemStack stack)
-    {
-        if (stack == null) return false;
-
-        CombustibleProperties props = stack.Collectible.GetCombustibleProperties(Api.World, stack, null);
-        if (props is { BurnTemperature: > 1000 }) return false;
-        if (props?.SmeltedStack == null || props.MeltingPoint <= 0 || !props.RequiresContainer) return false;
-
-        int storageType = CrucibleStack?.ItemAttributes?["storageType"].AsInt((int)EnumItemStorageFlags.Metallurgy)
-                          ?? (int)EnumItemStorageFlags.Metallurgy;
-
-        return (stack.Collectible.GetStorageFlags(stack) & (EnumItemStorageFlags)storageType) != 0;
     }
 
     /// <summary>

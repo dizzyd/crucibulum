@@ -76,8 +76,13 @@ namespace Crucibulum.Tests
         [VsTest]
         public async Task NoCrucibleMeansNoCharge()
         {
+            // The property and the transfer, because for a while only the property was asserted and
+            // nothing in the mod consulted it: it read false while the slots took ore anyway.
             var be = await PlaceForge(crucible: null);
+
             Assert.False(be.CanAcceptCharge, "an empty forge accepts no charge");
+            Assert.Equal(0, be.AddCharge(Holding(CopperNugget, 8), 8), "and none goes in");
+            Assert.True(Forge.ChargeEmpty, "the slots stayed empty");
             await Task.CompletedTask;
         }
 
@@ -85,7 +90,10 @@ namespace Crucibulum.Tests
         public async Task AMoltenCrucibleTakesNoMoreOre()
         {
             var be = await PlaceForge("game:crucible-brown-smelted");
+
             Assert.False(be.CanAcceptCharge, "a crucible that has already gone molten");
+            Assert.Equal(0, be.AddCharge(Holding(CopperNugget, 8), 8), "and takes no more ore");
+            Assert.True(Forge.ChargeEmpty, "the slots stayed empty");
             await Task.CompletedTask;
         }
 
@@ -185,13 +193,24 @@ namespace Crucibulum.Tests
             // The charge filter runs before the vanilla forge's, so it has to refuse anything the
             // forge would rather burn. Coal ore carries a burn temperature above 1000 and would
             // otherwise vanish into the crucible instead of feeding the fire.
+            //
+            // Asked of the slots themselves, with a crucible in place so the charge slots are open
+            // for business - the predicate on its own would not show that the fuel slot is where
+            // coal actually ends up. This used to ask a copy of the filter on the block entity that
+            // nothing consulted and that never checked the crucible's mouth at all.
             var be = await PlaceForge();
 
-            Assert.False(be.IsCrucibleCharge(World.Stack("game:ore-bituminouscoal")), "coal ore is not a charge");
-            Assert.False(be.IsCrucibleCharge(World.Stack("game:coke")), "coke is not a charge");
-            Assert.False(be.IsCrucibleCharge(World.Stack("game:charcoal")), "charcoal is not a charge");
-            Assert.True(be.IsCrucibleCharge(World.Stack(CopperNugget)), "a copper nugget is a charge");
-            Assert.True(be.IsCrucibleCharge(World.Stack("game:ingot-copper")), "a copper ingot is a charge");
+            foreach (string fuel in new[] { "game:ore-bituminouscoal", "game:coke", "game:charcoal" })
+            {
+                var hand = new DummySlot(World.Stack(fuel, 4));
+                Assert.False(be.ChargeSlots[0].CanHold(hand), $"{fuel} is not a charge");
+                Assert.Equal(0, be.AddCharge(hand, 4), "and none of it goes into the crucible");
+                Assert.True(be.FuelSlot.CanHold(hand), "it is fuel, and the fuel slot wants it");
+            }
+
+            Assert.True(be.ChargeSlots[0].CanHold(new DummySlot(World.Stack(CopperNugget, 4))), "a copper nugget is a charge");
+            Assert.True(ItemSlotCrucibleCharge.Accepts(World.Stack("game:ingot-copper")),
+                "and an ingot is something a crucible melts - whether it fits is the mouth's business");
 
             await Task.CompletedTask;
         }

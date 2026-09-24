@@ -201,10 +201,17 @@ whole ingot are never consulted. Nuggets are 0.0625 on a side and go in.
 
 This mod's charge slot mirrored the crucible's smelting rules and not its mouth, so until 1.4.0 the
 forge took all three, and a broken head melted into 100 units - which is the balance hole a
-Smithing Plus user reported. `ItemSlotCrucibleCharge.Fits` now applies the same limit the firepit
-does, read off the seated crucible's own attribute, so parity holds for any crucible from any mod
-that declares one. The two switches, `MeltIngots` and `MeltBrokenToolHeads`, are exemptions from
-that check and each admits only its own class. A broken head is recognised by the `brokenCount`
+Smithing Plus user reported. `ItemSlotCrucibleCharge.FitsMouth` now applies the same limit the
+firepit does, read off the seated crucible's own attribute, so parity holds for any crucible from
+any mod that declares one. The two switches, `MeltIngots` and `MeltBrokenToolHeads`, are exemptions
+from that check and each admits only its own class.
+
+A crucible has to be *there* for any of that to mean anything. Until 1.4.3 the limit was read off
+whatever sat in the work slot, and an absent or already-molten crucible declares no mouth - so with
+the crucible on the mouse cursor, or one that had just finished a melt still seated, the size check
+and both switches stopped running rather than refusing, and an ingot went in. `Admits` asks for a
+fired `BlockSmeltingContainer` first and the mouth second; a modded container that genuinely
+declares no mouth still takes what it likes. A broken head is recognised by the `brokenCount`
 attribute, on the stack or on the `repairedToolStack` it carries, read by name so nothing of
 theirs is referenced.
 

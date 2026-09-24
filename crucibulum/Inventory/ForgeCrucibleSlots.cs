@@ -86,6 +86,10 @@ public class ItemSlotForgeFuel : ItemSlotSurvival
 /// storageType 4 (Metallurgy) plus something that melts and needs a container to do it -- and
 /// the crucible's own mouth, which is the part that is easy to miss.
 ///
+/// There also has to *be* a crucible. The window stays open while the crucible rides the mouse
+/// cursor, and a forge holding a molten crucible or a plain ingot keeps its four charge slots on
+/// screen, so "what is in slot 0" is not something this can take on trust.
+///
 /// A firepit's crucible refuses an ingot, and with it a work item and a broken tool head. Not
 /// for anything to do with smelting - all three carry combustible props that melt them back into
 /// a whole ingot - but because the inventory compares an item's <c>size</c> against the
@@ -107,13 +111,41 @@ public class ItemSlotCrucibleCharge : ItemSlotSurvival
 
     public override bool CanHold(ItemSlot sourceSlot)
     {
-        return base.CanHold(sourceSlot) && Accepts(sourceSlot.Itemstack) && Fits(sourceSlot.Itemstack, CrucibleInForge);
+        return base.CanHold(sourceSlot) && Admits(sourceSlot.Itemstack, CrucibleInForge);
     }
 
     public override bool CanTakeFrom(ItemSlot sourceSlot, EnumMergePriority priority = EnumMergePriority.AutoMerge)
     {
-        return base.CanTakeFrom(sourceSlot, priority) && Accepts(sourceSlot.Itemstack) && Fits(sourceSlot.Itemstack, CrucibleInForge);
+        return base.CanTakeFrom(sourceSlot, priority) && Admits(sourceSlot.Itemstack, CrucibleInForge);
     }
+
+    /// <summary>
+    /// The whole rule for getting something into the charge, in one place: there has to be a fired
+    /// crucible to put it in, it has to be something that crucible melts, and it has to go through
+    /// the mouth.
+    ///
+    /// The container comes first because the other two questions are meaningless without it. A
+    /// crucible that is absent or already molten declares no mouth, and reading that as "no limit"
+    /// meant the size check - and with it both config switches, which are exemptions from that
+    /// check and nothing else - simply did not run: an ingot went in while the crucible sat on the
+    /// cursor, or while a molten one was still seated, and melted once a fired one was back.
+    ///
+    /// Everything that reaches these slots goes through <see cref="CanHold"/> or
+    /// <see cref="CanTakeFrom"/> - a drag, a click, a same-item merge, a flip, a shift-click, a
+    /// hopper - so this is the only gate there is, and the only one there needs to be.
+    /// </summary>
+    public static bool Admits(ItemStack stack, ItemStack crucible) =>
+        IsFiredCrucible(crucible) && Accepts(stack) && FitsMouth(stack, crucible);
+
+    /// <summary>
+    /// A crucible that can still take a charge: fired, and not already run molten.
+    ///
+    /// A molten crucible is a <see cref="BlockSmeltedContainer"/>, which is *not* a
+    /// <see cref="BlockSmeltingContainer"/> - upstream has them as siblings, both straight off
+    /// Block - so asking for the smelting one excludes it. Anything else a mod seats here is
+    /// welcome on the same terms as the vanilla crucible, mouth and all.
+    /// </summary>
+    public static bool IsFiredCrucible(ItemStack crucible) => crucible?.Collectible is BlockSmeltingContainer;
 
     /// <summary>Whether this is something a crucible melts at all. Size is a separate question.</summary>
     public static bool Accepts(ItemStack stack)
@@ -129,13 +161,16 @@ public class ItemSlotCrucibleCharge : ItemSlotSurvival
     /// <summary>
     /// Whether the stack fits through the crucible's mouth, decided the way a firepit decides it:
     /// the item's dimensions against the container's <c>maxContentDimensions</c>. A crucible that
-    /// declares no limit takes anything, as vanilla's inventory does when the attribute is absent,
-    /// and so does an empty forge, where there is no mouth to measure against.
+    /// declares no limit takes anything, as vanilla's inventory does when the attribute is absent.
+    ///
+    /// The size question on its own, and not an admission test: "no mouth declared" is the same
+    /// answer here for a legitimate modded crucible and for no crucible at all. Which of those it
+    /// is, is <see cref="IsFiredCrucible"/>'s question, and <see cref="Admits"/> asks both.
     ///
     /// The two config switches are exemptions from this and nothing else: each admits exactly its
     /// own class of item and leaves the limit in place for everything else.
     /// </summary>
-    public static bool Fits(ItemStack stack, ItemStack crucible)
+    public static bool FitsMouth(ItemStack stack, ItemStack crucible)
     {
         if (stack == null) return false;
 

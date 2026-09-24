@@ -35,6 +35,14 @@
       <HintPath>$(VINTAGE_STORY)/Lib/0Harmony.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!--
+      For lifting one attribute off a block to stand in for a modded crucible. The in-game
+      compiler references every loaded assembly, so this is only here for the editor.
+    -->
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(VINTAGE_STORY)/Lib/Newtonsoft.Json.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="VSEssentials">
       <HintPath>$(VINTAGE_STORY)/Mods/VSEssentials.dll</HintPath>
       <Private>False</Private>
