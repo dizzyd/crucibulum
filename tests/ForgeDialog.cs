@@ -451,13 +451,16 @@ namespace Crucibulum.Tests
             public async Task PointAt(int slot)
             {
                 var b = Dlg.SingleComposer.GetSlotGrid("chargeSlots").SlotBounds[slot];
-                int x = (int)(b.absX + b.OuterWidth / 2), y = (int)(b.absY + b.OuterHeight / 2);
+                MoveCursor((int)(b.absX + b.OuterWidth / 2), (int)(b.absY + b.OuterHeight / 2));
+                await Frames.Wait(5);
+            }
 
+            void MoveCursor(int x, int y)
+            {
                 game.Platform.GetType()
                     .GetMethod("SetMousePosition", BindingFlags.NonPublic | BindingFlags.Instance)
                     .Invoke(game.Platform, new object[] { (float)x, (float)y });
                 game.OnMouseMove(new MouseEvent(x, y));
-                await Frames.Wait(5);
             }
 
             /// <summary>Synchronous, so a caller can press inside the frame it is already in.</summary>
@@ -496,6 +499,13 @@ namespace Crucibulum.Tests
                 Release();
                 Dlg.TryClose();
                 await Gui.WaitGone<GuiDialogCrucibleForge>(120);
+
+                // Back to the middle of the screen, where the cursor sits in play. Left over a charge
+                // slot it is over the minimap once the window has gone, and the next test's right
+                // click on a block lands there instead - opening "add waypoint", which then sits in
+                // front of every window after it.
+                await OnClient();
+                MoveCursor(Capi.Render.FrameWidth / 2, Capi.Render.FrameHeight / 2);
             }
         }
 

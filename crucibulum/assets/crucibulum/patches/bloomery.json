@@ -1,0 +1,8 @@
+[
+	{
+		"file": "game:blocktypes/clay/bloomerybase.json",
+		"op": "addmerge",
+		"path": "/entityBehaviors",
+		"value": [ { "name": "CrucibulumBloomeryFire" } ]
+	}
+]

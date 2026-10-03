@@ -1433,13 +1433,6 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
     /// <summary>Where the crucible's mouth is, given how far it has sunk into the coal.</summary>
     protected double CrucibleMouthY => Pos.InternalY + 11 / 16.0 + (FuelLevel - 1) / 64.0 + 5 / 16.0;
 
-    /// <summary>
-    /// The odds that a spark comes down within the next <paramref name="dt"/> seconds of a melt,
-    /// from the configured average gap between them.
-    /// </summary>
-    public static double SparkLandingChance(float dt) =>
-        Math.Min(1, dt / Math.Max(1f, CrucibulumModSystem.Config.SparkLandingSeconds));
-
     /// <summary>How far from the forge, in blocks, a spark can come down.</summary>
     public const int SparkReach = 2;
 
@@ -1448,7 +1441,7 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         if (!CrucibulumModSystem.Config.SparksSpreadFire) return;
 
         Random rand = Api.World.Rand;
-        if (rand.NextDouble() >= SparkLandingChance(dt)) return;
+        if (rand.NextDouble() >= SparkFire.LandingChance(dt)) return;
 
         int dx = rand.Next(-SparkReach, SparkReach + 1);
         int dz = rand.Next(-SparkReach, SparkReach + 1);
@@ -1458,172 +1451,11 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
     }
 
     /// <summary>
-    /// A spark from this crucible coming down at <paramref name="at"/>. It lights a pile of
-    /// firewood or coal it lands on, or starts a fire in an open space beside something that burns -
-    /// vanilla's own test for where fire can spread, and vanilla's own fire once it has. True if
-    /// anything caught.
-    ///
-    /// The spark is held to the forge's claim boundary (see <see cref="IsWithinForgeClaimBoundary"/>)
-    /// for where it lands and for the fuel it would set burning. Only the spark: a fire it starts is
-    /// ordinary vanilla fire from then on, and spreads as one.
+    /// A spark from this crucible coming down at <paramref name="at"/>; see <see cref="SparkFire"/>
+    /// for what it may light and where. True if anything caught.
     /// </summary>
-    protected bool LandSpark(BlockPos at)
-    {
-        if (!CrucibulumModSystem.Config.SparksSpreadFire || !Api.World.Config.GetBool("allowFireSpread")) return false;
-        if (!IsWithinForgeClaimBoundary(at) || !SparkCanReach(at)) return false;
-
-        IBlockAccessor ba = Api.World.BlockAccessor;
-        BlockEntity atBe = ba.GetBlockEntity(at);
-
-        // Lit where they lie, as vanilla's fire lights them: a coal pile is not open space, so the
-        // fire-beside-fuel test below would never reach one.
-        switch (atBe)
-        {
-            case BlockEntityCoalPile coal:
-                if (coal.IsBurning || !coal.CanIgnite) return false;
-                coal.TryIgnite();
-                Api.World.Logger.Audit("A spark from the crucible at {0} lit the coal pile at {1}.", Pos, at);
-                return true;
-
-            case BlockEntityGroundStorage pile:
-                if (pile.IsBurning || !pile.CanIgnite) return false;
-                pile.TryIgnite();
-                Api.World.Logger.Audit("A spark from the crucible at {0} lit the pile at {1}.", Pos, at);
-                return true;
-        }
-
-        if (ba.GetBlock(at).Replaceable < 6000 || ba.GetBlock(at, BlockLayersAccess.Fluid).Id != 0) return false;
-        if (atBe?.GetBehavior<BEBehaviorBurning>()?.IsBurning == true) return false;
-
-        var reinforcement = Api.ModLoader.GetModSystem<ModSystemBlockReinforcement>();
-        BlockPos fuelPos = null;
-        foreach (BlockFacing facing in BlockFacing.ALLFACES)
-        {
-            BlockPos npos = at.AddCopy(facing);
-            if (!Burns(npos) || reinforcement?.IsReinforced(npos) == true) continue;
-            if (!IsWithinForgeClaimBoundary(npos)) continue;
-            if (ba.GetBlockEntity(npos)?.GetBehavior<BEBehaviorBurning>() != null) continue;
-            fuelPos = npos;
-            break;
-        }
-        if (fuelPos == null) return false;
-
-        Block fire = Api.World.GetBlock(new AssetLocation("fire"));
-        if (fire == null) return false;
-
-        ba.SetBlock(fire.BlockId, at);
-        ba.GetBlockEntity(at)?.GetBehavior<BEBehaviorBurning>()?.OnFirePlaced(at, fuelPos, null);
-        Api.World.Logger.Audit("A spark from the crucible at {0} started a fire at {1}.", Pos, at);
-        return true;
-    }
-
-    /// <summary>
-    /// The same question BEBehaviorBurning asks of a block before it will burn it, in the same order:
-    /// a block's combustible properties decide if it has any, and only a block without them is asked
-    /// as an ICombustible.
-    /// </summary>
-    protected bool Burns(BlockPos pos)
-    {
-        Block block = Api.World.BlockAccessor.GetBlock(pos);
-        CombustibleProperties props = block.GetCombustibleProperties(Api.World, null, pos);
-        if (props != null) return props.BurnDuration > 0;
-        return block.GetInterface<ICombustible>(Api.World, pos)?.GetBurnDuration(Api.World, pos) > 0;
-    }
-
-    /// <summary>
-    /// Whether a spark could fly from the crucible's mouth to <paramref name="at"/>: the straight
-    /// line between them passes through no block's collision boxes. A straight line rather than the
-    /// arc a spark falling to a spot below the mouth would really follow, so a wall too low to be in
-    /// the way of the arc can still stop one - erring the way that lets a stone enclosure fireproof a
-    /// forge.
-    ///
-    /// Every cell the line crosses is checked, the one the mouth itself sits in included, so a block
-    /// set right on top of the forge stops it too. Only the forge and the landing spot are left out.
-    /// </summary>
-    protected bool SparkCanReach(BlockPos at)
-    {
-        IBlockAccessor ba = Api.World.BlockAccessor;
-        Vec3d from = new(Pos.X + 0.5, Pos.Y + (CrucibleMouthY - Pos.InternalY), Pos.Z + 0.5);
-        Vec3d to = new(at.X + 0.5, at.Y + 0.5, at.Z + 0.5);
-        Vec3d dir = to - from;
-
-        // Walk the cells the segment crosses in order, stepping across whichever cell face it
-        // reaches first (Amanatides and Woo).
-        int x = (int)Math.Floor(from.X), y = (int)Math.Floor(from.Y), z = (int)Math.Floor(from.Z);
-        int stepX = Math.Sign(dir.X), stepY = Math.Sign(dir.Y), stepZ = Math.Sign(dir.Z);
-        double tMaxX = FirstCrossing(from.X, dir.X, x), tMaxY = FirstCrossing(from.Y, dir.Y, y), tMaxZ = FirstCrossing(from.Z, dir.Z, z);
-        double tDeltaX = dir.X == 0 ? double.PositiveInfinity : Math.Abs(1 / dir.X);
-        double tDeltaY = dir.Y == 0 ? double.PositiveInfinity : Math.Abs(1 / dir.Y);
-        double tDeltaZ = dir.Z == 0 ? double.PositiveInfinity : Math.Abs(1 / dir.Z);
-
-        BlockPos cell = new(Pos.dimension);
-        while (true)
-        {
-            cell.Set(x, y, z);
-            if (cell.Equals(at)) return true;
-            if (!cell.Equals(Pos) && SegmentHitsBlock(ba, cell, from, dir)) return false;
-
-            if (tMaxX <= tMaxY && tMaxX <= tMaxZ) { if (tMaxX > 1) return true; x += stepX; tMaxX += tDeltaX; }
-            else if (tMaxY <= tMaxZ) { if (tMaxY > 1) return true; y += stepY; tMaxY += tDeltaY; }
-            else { if (tMaxZ > 1) return true; z += stepZ; tMaxZ += tDeltaZ; }
-        }
-    }
-
-    /// <summary>The fraction of the way along a segment at which it first leaves cell <paramref name="cell"/> on one axis.</summary>
-    private static double FirstCrossing(double origin, double delta, int cell)
-    {
-        if (delta == 0) return double.PositiveInfinity;
-        double boundary = delta > 0 ? cell + 1 : cell;
-        return (boundary - origin) / delta;
-    }
-
-    /// <summary>
-    /// Whether the segment from <paramref name="from"/> along <paramref name="dir"/> passes through
-    /// any of the collision boxes of the block in <paramref name="cell"/>. Merely touching a face
-    /// does not count.
-    /// </summary>
-    private static bool SegmentHitsBlock(IBlockAccessor ba, BlockPos cell, Vec3d from, Vec3d dir)
-    {
-        Cuboidf[] boxes = ba.GetBlock(cell).GetCollisionBoxes(ba, cell);
-        if (boxes == null) return false;
-
-        foreach (Cuboidf box in boxes)
-        {
-            double enter = 0, leave = 1;
-            if (!Slab(from.X, dir.X, cell.X + box.X1, cell.X + box.X2, ref enter, ref leave)) continue;
-            if (!Slab(from.Y, dir.Y, cell.Y + box.Y1, cell.Y + box.Y2, ref enter, ref leave)) continue;
-            if (!Slab(from.Z, dir.Z, cell.Z + box.Z1, cell.Z + box.Z2, ref enter, ref leave)) continue;
-            if (enter < leave) return true;
-        }
-        return false;
-    }
-
-    /// <summary>Narrows [enter, leave] to where the segment lies between min and max on one axis.</summary>
-    private static bool Slab(double origin, double delta, double min, double max, ref double enter, ref double leave)
-    {
-        if (delta == 0) return origin > min && origin < max;
-
-        double t1 = (min - origin) / delta, t2 = (max - origin) / delta;
-        if (t1 > t2) (t1, t2) = (t2, t1);
-        enter = Math.Max(enter, t1);
-        leave = Math.Min(leave, t2);
-        return enter < leave;
-    }
-
-    /// <summary>
-    /// The land a spark from this forge may touch. Unclaimed land always; claimed land only where
-    /// every claim covering it also covers the forge. It is the claims themselves that are compared,
-    /// not their owners: a neighbouring claim belonging to the same player is still somewhere else.
-    /// A spark has no player behind it to check permissions against, so this is the whole test.
-    /// </summary>
-    protected bool IsWithinForgeClaimBoundary(BlockPos pos)
-    {
-        LandClaim[] there = Api.World.Claims.Get(pos);
-        if (there == null || there.Length == 0) return true;
-
-        LandClaim[] here = Api.World.Claims.Get(Pos) ?? Array.Empty<LandClaim>();
-        return there.All(claim => here.Contains(claim));
-    }
+    protected bool LandSpark(BlockPos at) =>
+        SparkFire.TryLight(Api, Pos, new[] { Pos }, new Vec3d(Pos.X + 0.5, Pos.Y + (CrucibleMouthY - Pos.InternalY), Pos.Z + 0.5), at, "the crucible");
 
     protected void SpawnReadySparks()
     {

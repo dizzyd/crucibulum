@@ -294,6 +294,7 @@ firepit, which reads its ingredients from whatever heat source is holding it.
 | `MeltSparkRate` | how many sparks a melting charge throws, as a multiple of the default (1); 0 for none |
 | `MeltDoneSparkBurst` | the burst of sparks when a melt finishes, as a multiple of the default (1); 0 for none |
 | `SparkLandingSeconds` | with sparks spreading fire, average seconds between sparks landing around a melting forge (10) |
+| `BloomerySparks` | a burning bloomery throws flames from its chimney and sparks from its front; with `SparksSpreadFire`, they can start fires (off) |
 | `GateAirOpen`, `GateAirHalf`, `GateAirQuarter`, `GateAirShut` | what each notch does to the fire, as a share of full draught (1.0 / 0.85 / 0.7 / 0.55) |
 
 With [ConfigLib](https://mods.vintagestory.at/configlib) installed these appear on its settings
@@ -352,6 +353,22 @@ no attention to claims. On a server where that matters, leave `SparksSpreadFire`
 How the sparks look is separate from whether they can burn anything: `MeltSparkRate` scales the
 sparks a melting charge throws and `MeltDoneSparkBurst` the burst when a melt finishes, and 0 turns
 either off.
+
+### Flames from a bloomery
+
+`BloomerySparks` gives a burning bloomery a fire to match. Flames pour out of the top of its
+chimney - vanilla's own fire, the same a burning block shows, as a column out of the stack - and a
+steady stream of sparks comes out of the opening at its foot. Off by default, and off it leaves the
+bloomery exactly as vanilla has it; the bloomery itself is not replaced, only given one extra
+behaviour by an asset patch.
+
+With `SparksSpreadFire` on as well, they can start fires on the same rules as the crucible's sparks.
+Each bloomery gets one chance at a fire per `SparkLandingSeconds` on average, as a crucible does, and
+two in three of those go to the flames. The flames set light to what they touch right around the
+chimney top - a roof built down onto the stack, a beam beside it - with the fire starting against
+it; the sparks to what they come down by, a block or two out in front. The claim boundary and the
+rule that solid blocks stop them both hold, measured from the bloomery: a stone cap on the stack
+keeps its flames to itself.
 
 ## How it hooks in
 

@@ -34,36 +34,12 @@ namespace Crucibulum.Tests
 
         const string LogCode = "game:log-placed-oak-ud";
 
-        sealed class Settings
-        {
-            bool sparksSpreadFire, allowFireSpread;
-            float meltSparkRate, meltDoneSparkBurst, sparkLandingSeconds;
-
-            public static Settings Take() => new()
-            {
-                sparksSpreadFire = CrucibulumModSystem.Config.SparksSpreadFire,
-                meltSparkRate = CrucibulumModSystem.Config.MeltSparkRate,
-                meltDoneSparkBurst = CrucibulumModSystem.Config.MeltDoneSparkBurst,
-                sparkLandingSeconds = CrucibulumModSystem.Config.SparkLandingSeconds,
-                allowFireSpread = Sapi.World.Config.GetBool("allowFireSpread"),
-            };
-
-            public void Restore()
-            {
-                CrucibulumModSystem.Config.SparksSpreadFire = sparksSpreadFire;
-                CrucibulumModSystem.Config.MeltSparkRate = meltSparkRate;
-                CrucibulumModSystem.Config.MeltDoneSparkBurst = meltDoneSparkBurst;
-                CrucibulumModSystem.Config.SparkLandingSeconds = sparkLandingSeconds;
-                Sapi.World.Config.SetBool("allowFireSpread", allowFireSpread);
-            }
-        }
-
-        Settings before;
+        SparkSettings before;
 
         [BeforeEach]
         public async Task TakeTheSettingsAndKeepThePlayerAlive()
         {
-            before = Settings.Take();   // before any await, so nothing has had a chance to move them
+            before = SparkSettings.Take();   // before any await, so nothing has had a chance to move them
             await TestLife.Alive();
         }
 
@@ -353,13 +329,13 @@ namespace Crucibulum.Tests
         {
             // Per crucible tick, so the configured average gap is what a player actually sees.
             CrucibulumModSystem.Config.SparkLandingSeconds = 10;
-            Assert.Close(BlockEntityCrucibulumForge.SparkLandingChance(0.2f), 0.02, 1e-6, "one every ten seconds, at 200ms a tick");
+            Assert.Close(SparkFire.LandingChance(0.2f), 0.02, 1e-6, "one every ten seconds, at 200ms a tick");
 
             CrucibulumModSystem.Config.SparkLandingSeconds = 1;
-            Assert.Close(BlockEntityCrucibulumForge.SparkLandingChance(0.2f), 0.2, 1e-6, "one a second");
+            Assert.Close(SparkFire.LandingChance(0.2f), 0.2, 1e-6, "one a second");
 
             CrucibulumModSystem.Config.SparkLandingSeconds = 0;
-            Assert.Close(BlockEntityCrucibulumForge.SparkLandingChance(0.2f), 0.2, 1e-6, "a zero from a hand-edited file is held at one a second");
+            Assert.Close(SparkFire.LandingChance(0.2f), 0.2, 1e-6, "a zero from a hand-edited file is held at one a second");
             await Task.CompletedTask;
         }
 
@@ -516,59 +492,6 @@ namespace Crucibulum.Tests
             await OnClient();
             await Until(() => ((BlockEntityCrucibulumForge)Capi.World.BlockAccessor.GetBlockEntity(ForgePos))?.IsMelting == false, 8,
                 "the client to hear at once that the melt has stopped");
-        }
-
-        /// <summary>
-        /// The crucible's own particles at the forge's block, on either side, from the game's own
-        /// SpawnParticles. Test-only: a Harmony prefix for as long as this is held.
-        ///
-        /// The vanilla forge throws sparks and smoke of its own from the same block, so position is
-        /// not enough. The crucible's are told apart by colour: they are clones of vanilla's
-        /// big-metal-spark and held-smoke templates, which the forge's own do not use.
-        /// </summary>
-        sealed class ParticleWatch : IDisposable
-        {
-            public sealed record Spawn(bool OnServer, bool IsSpark, float MinQuantity, float AddQuantity, float AddVelocityY);
-
-            static readonly object gate = new();
-            static readonly List<Spawn> seen = new();
-            static BlockPos watching;
-
-            readonly Harmony harmony = new("crucibulum.tests.particlewatch");
-
-            public ParticleWatch(BlockPos pos)
-            {
-                lock (gate) { seen.Clear(); watching = pos.Copy(); }
-                var prefix = new HarmonyMethod(typeof(ParticleWatch).GetMethod(nameof(Saw), BindingFlags.NonPublic | BindingFlags.Static));
-                harmony.Patch(AccessTools.Method(typeof(ClientMain), nameof(ClientMain.SpawnParticles), new[] { typeof(IParticlePropertiesProvider), typeof(IPlayer) }), prefix);
-                harmony.Patch(AccessTools.Method(typeof(ServerMain), nameof(ServerMain.SpawnParticles), new[] { typeof(IParticlePropertiesProvider), typeof(IPlayer) }), prefix);
-            }
-
-            static void Saw(object __instance, IParticlePropertiesProvider __0)
-            {
-                if (__0 is not SimpleParticleProperties p) return;
-
-                bool spark = p.Color == BlockSmeltedContainer.bigMetalSparks.Color;
-                bool smoke = p.Color == BlockSmeltedContainer.smokeHeld.Color;
-                if (!spark && !smoke) return;
-
-                lock (gate)
-                {
-                    if (watching == null) return;
-                    if (Math.Floor(p.MinPos.X) != watching.X || Math.Floor(p.MinPos.Z) != watching.Z) return;
-                    seen.Add(new Spawn(__instance is ServerMain, spark, p.MinQuantity, p.AddQuantity, p.AddVelocity.Y));
-                }
-            }
-
-            public List<Spawn> Sparks(bool onServer) { lock (gate) return seen.Where(s => s.OnServer == onServer && s.IsSpark).ToList(); }
-            public List<Spawn> Smoke(bool onServer) { lock (gate) return seen.Where(s => s.OnServer == onServer && !s.IsSpark).ToList(); }
-            public void Clear() { lock (gate) seen.Clear(); }
-
-            public void Dispose()
-            {
-                harmony.UnpatchAll(harmony.Id);
-                lock (gate) { watching = null; seen.Clear(); }
-            }
         }
     }
 }

@@ -130,6 +130,20 @@ public class CrucibulumConfig
     public float SparkLandingSeconds = 10f;
 
     /// <summary>
+    /// Whether a burning bloomery throws flames out of its chimney and sparks out of its front.
+    ///
+    /// The flames are vanilla's own fire, the same a burning block shows, as a column out of the top
+    /// of the stack; the sparks a steady stream from the opening at its foot. Off, the bloomery is
+    /// exactly vanilla's. With <see cref="SparksSpreadFire"/> on as well, the flames can set light to
+    /// anything that burns right around the chimney top and the sparks to what they land on in front,
+    /// on the same rules as the crucible's: one chance per bloomery per
+    /// <see cref="SparkLandingSeconds"/> on average, two in three of them the flames'. Read live.
+    /// </summary>
+    [Category("Sparks")]
+    [Description("A burning bloomery throws flames from its chimney and sparks from its front; with SparksSpreadFire they can start fires.")]
+    public bool BloomerySparks = false;
+
+    /// <summary>
     /// How fast the forge burns while working a crucible, against the firepit's rate per second.
     ///
     /// The forge burns on the calendar and the firepit on the real clock, which left melting over

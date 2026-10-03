@@ -55,6 +55,9 @@ public class CrucibulumModSystem : ModSystem
         api.RegisterBlockClass("CrucibulumForge", typeof(BlockCrucibulumForge));
         api.RegisterBlockEntityClass("CrucibulumForge", typeof(BlockEntityCrucibulumForge));
 
+        // Fitted to vanilla's bloomery by assets/crucibulum/patches/bloomery.json.
+        api.RegisterBlockEntityBehaviorClass(BEBehaviorBloomeryFire.Name, typeof(BEBehaviorBloomeryFire));
+
         RegisterWithConfigKit(api);
 
         // The one Harmony patch in the mod. See FirepitCruciblePatch for why it is Harmony and
