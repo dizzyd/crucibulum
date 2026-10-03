@@ -32,6 +32,9 @@ namespace Crucibulum.Tests
         static BlockPos Beam => P(9, 3, 8);
         static BlockPos OverChimney => P(8, 3, 8);
 
+        // Two blocks over the stack, with the gap under it - still inside the column of flame.
+        static BlockPos HighOverChimney => P(8, 4, 8);
+
         // Two blocks out in front of the opening, with a log beyond: where a spark comes down.
         static BlockPos InFront => P(8, 1, 10);
         static BlockPos LogInFront => P(8, 1, 11);
@@ -57,9 +60,15 @@ namespace Crucibulum.Tests
             Sapi.World.Config.SetBool("allowFireSpread", world);
         }
 
-        /// <summary>A bloomery with its chimney, loaded with ore and charcoal, lit if asked.</summary>
+        /// <summary>
+        /// A bloomery with its chimney, loaded with ore and charcoal, lit if asked - with fire spread off,
+        /// whatever the loaded config says, so its own tick cannot set light to anything while a test
+        /// is still arranging things. Each test turns it on when it is ready.
+        /// </summary>
         static async Task ABloomery(bool lit = true)
         {
+            CrucibulumModSystem.Config.SparksSpreadFire = false;
+
             World.SetBlock("game:bloomerybase-north", BloomeryPos);
             World.SetBlock("game:bloomerychimney", ChimneyPos);
             World.SetBlock(LogCode, Beam);
@@ -129,6 +138,7 @@ namespace Crucibulum.Tests
             Allow(bloomery: true, spread: true);
 
             Assert.True(Fire.Throwing, "a burning bloomery throws, with the option on");
+            Assert.Null(FireOn(Beam), "nothing alight before the attempt");
             Assert.True(Lick(Beam), "the flames caught");
             Assert.NotNull(FireOn(Beam), "a fire against the beam");
         }
@@ -143,6 +153,7 @@ namespace Crucibulum.Tests
             await Ticks(1);
             Allow(bloomery: true, spread: true);
 
+            Assert.Null(FireOn(OverChimney), "nothing alight before the attempt");
             Assert.True(Lick(OverChimney), "the flames caught the roof");
             var burning = FireOn(OverChimney);
             Assert.NotNull(burning, "a fire against the roof");
@@ -181,7 +192,8 @@ namespace Crucibulum.Tests
             await ABloomery();
             World.SetBlock("game:air", Beam);
 
-            BlockPos[] places = { OverChimney, BesideChimney, Beam };
+            // Over the stack, two over it, beside it, beside and above, and the diagonals at each height.
+            BlockPos[] places = { OverChimney, HighOverChimney, BesideChimney, Beam, P(9, 2, 9), P(7, 3, 9), P(9, 4, 7) };
             for (int seed = 0; seed < places.Length * 3; seed++)
             {
                 BlockPos wood = places[seed % places.Length];
@@ -223,6 +235,70 @@ namespace Crucibulum.Tests
             Allow(bloomery: true, spread: false);
 
             Assert.Equal(1, burning, "one piece of five alight after one chance");
+        }
+
+        [VsTest]
+        public async Task ALogAGapAboveTheStackCatches()
+        {
+            // The flames rise a block and a half or more out of the chimney, so wood with a gap of air
+            // under it is in them as much as wood laid straight on top - and the fire starts in the gap.
+            await ABloomery();
+            World.SetBlock(LogCode, HighOverChimney);
+            await Ticks(1);
+            Allow(bloomery: true, spread: true);
+
+            Assert.Equal("air", BlockAt(OverChimney), "a gap over the stack, nothing alight in it");
+            Assert.True(Lick(HighOverChimney), "the flames caught the log above it");
+            Assert.Equal(OverChimney, FireOn(HighOverChimney)?.FirePos, "the fire in the gap, under the log");
+        }
+
+        [VsTest]
+        public async Task NothingOutsideTheThreeByThreeCatches()
+        {
+            // Two blocks out from the stack, at the height of a roof: past what the flames reach.
+            await ABloomery();
+            World.SetBlock("game:air", Beam);
+            BlockPos wood = P(10, 3, 8);
+            World.SetBlock(LogCode, wood);
+            await Ticks(1);
+
+            Allow(bloomery: true, spread: true);
+            for (int seed = 0; seed < 5; seed++) LickNearbyFuel(new System.Random(seed));
+            bool caught = FireOn(wood) != null;
+            Allow(bloomery: true, spread: false);
+
+            Assert.False(caught, "wood two blocks off the stack, five chances in");
+        }
+
+        [VsTest]
+        public async Task TheFlamesLightACoalPileBesideTheStack()
+        {
+            await ABloomery();
+            World.SetBlock("game:air", Beam);
+            World.SetBlock("game:rock-granite", P(9, 1, 8));   // something for the pile to sit on
+            World.SetBlock("game:coalpile", BesideChimney);
+            await Ticks(1);
+            var pile = (BlockEntityCoalPile)Sapi.World.BlockAccessor.GetBlockEntity(BesideChimney);
+            pile.inventory[0].Itemstack = World.Stack("game:charcoal", 8);
+            pile.MarkDirty(true);
+            Assert.True(pile.CanIgnite && !pile.IsBurning, "an unlit pile of charcoal beside the stack");
+
+            Allow(bloomery: true, spread: true);
+            Assert.True(Lick(BesideChimney), "the flames reached it");
+            Assert.True(pile.IsBurning, "and it is alight");
+        }
+
+        [VsTest]
+        public async Task SomethingSolidInTheGapHoldsTheFlamesBack()
+        {
+            await ABloomery();
+            World.SetBlock("game:rock-granite", OverChimney);
+            World.SetBlock(LogCode, HighOverChimney);
+            await Ticks(1);
+            Allow(bloomery: true, spread: true);
+
+            Assert.False(Lick(HighOverChimney), "flames through a block of granite to the log over it");
+            Assert.Null(FireOn(HighOverChimney), "no fire on it");
         }
 
         [VsTest]
@@ -273,6 +349,7 @@ namespace Crucibulum.Tests
             await ABloomery();
             Allow(bloomery: true, spread: true);
 
+            Assert.Equal("air", BlockAt(InFront), "nothing alight before the attempt");
             Assert.True(Spark(InFront), "the spark caught");
             Assert.Equal("fire", BlockAt(InFront), "fire in front of the bloomery");
         }

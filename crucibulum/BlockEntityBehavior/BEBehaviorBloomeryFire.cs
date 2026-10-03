@@ -183,18 +183,26 @@ public class BEBehaviorBloomeryFire : BlockEntityBehavior
     private BlockPos[] flameReach;
 
     /// <summary>
-    /// What the chimney's flames reach: whatever sits straight over its top, and what is beside it at
-    /// the height of its mouth and just above - where a roof or a wall built close to the stack would be.
+    /// What the chimney's flames reach: the three-by-three around the top of the stack, from the
+    /// height of its mouth up two blocks - as high as the flames and embers rise. The column itself
+    /// goes straight up, but the heat off it puts everything that close at risk: a roof laid over the
+    /// stack or with a gap under it, a beam or a wall beside it, a corner diagonally off it.
     /// </summary>
     private BlockPos[] FlameReach()
     {
         BlockPos chimney = Pos.UpCopy();
-        var reach = new BlockPos[9];
-        reach[0] = chimney.UpCopy();
-        for (int i = 0; i < 4; i++)
+        var reach = new BlockPos[26];
+        int n = 0;
+        for (int dy = 0; dy <= 2; dy++)
         {
-            reach[1 + i] = chimney.AddCopy(BlockFacing.HORIZONTALS[i]);
-            reach[5 + i] = chimney.AddCopy(BlockFacing.HORIZONTALS[i]).Up();
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                for (int dz = -1; dz <= 1; dz++)
+                {
+                    if (dx == 0 && dy == 0 && dz == 0) continue;   // the chimney itself
+                    reach[n++] = chimney.AddCopy(dx, dy, dz);
+                }
+            }
         }
         return reach;
     }

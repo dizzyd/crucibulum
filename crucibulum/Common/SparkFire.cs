@@ -71,6 +71,11 @@ public static class SparkFire
     public static bool TryLightFuel(ICoreAPI api, BlockPos source, BlockPos[] sourceCells, Vec3d from, BlockPos fuel, string what)
     {
         if (!Allowed(api)) return false;
+
+        // Reject what will not burn before querying claims or tracing the flame's path: most of what a
+        // flame reaches is air or stone.
+        if (!IsLightablePile(api.World.BlockAccessor, fuel) && !Burns(api.World, fuel)) return false;
+
         if (!IsWithinClaimBoundary(api, source, fuel) || !CanReach(api.World.BlockAccessor, sourceCells, from, fuel)) return false;
         if (TryLightPile(api, fuel, source, what)) return true;
         if (!IsFuel(api, source, fuel)) return false;
@@ -88,27 +93,36 @@ public static class SparkFire
     private static bool Allowed(ICoreAPI api) =>
         CrucibulumModSystem.Config.SparksSpreadFire && api.World.Config.GetBool("allowFireSpread");
 
+    /// <summary>A pile of coal or firewood at <paramref name="at"/> that is not alight yet and will light.</summary>
+    private static bool IsLightablePile(IBlockAccessor ba, BlockPos at) => ba.GetBlockEntity(at) switch
+    {
+        BlockEntityCoalPile coal => !coal.IsBurning && coal.CanIgnite,
+        BlockEntityGroundStorage pile => !pile.IsBurning && pile.CanIgnite,
+        _ => false,
+    };
+
     /// <summary>
     /// Lights a pile of coal or firewood at <paramref name="at"/>, where it lies, as vanilla's fire
     /// lights one. A coal pile is not open space, so the fire-beside-fuel route would never reach it.
     /// </summary>
     private static bool TryLightPile(ICoreAPI api, BlockPos at, BlockPos source, string what)
     {
-        switch (api.World.BlockAccessor.GetBlockEntity(at))
+        IBlockAccessor ba = api.World.BlockAccessor;
+        if (!IsLightablePile(ba, at)) return false;
+
+        switch (ba.GetBlockEntity(at))
         {
-            case BlockEntityCoalPile coal when !coal.IsBurning && coal.CanIgnite:
+            case BlockEntityCoalPile coal:
                 coal.TryIgnite();
                 api.World.Logger.Audit("A spark from {0} at {1} lit the coal pile at {2}.", what, source, at);
-                return true;
+                break;
 
-            case BlockEntityGroundStorage pile when !pile.IsBurning && pile.CanIgnite:
+            case BlockEntityGroundStorage pile:
                 pile.TryIgnite();
                 api.World.Logger.Audit("A spark from {0} at {1} lit the pile at {2}.", what, source, at);
-                return true;
-
-            default:
-                return false;
+                break;
         }
+        return true;
     }
 
     /// <summary>Somewhere vanilla's fire could stand: replaceable, dry, and not already alight.</summary>

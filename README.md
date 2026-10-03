@@ -366,8 +366,9 @@ behaviour by an asset patch.
 
 With `SparksSpreadFire` on as well, they can start fires on the same rules as the crucible's sparks.
 Each bloomery gets one chance at a fire per `SparkLandingSeconds` on average, as a crucible does, and
-two in three of those go to the flames. The flames reach what is right around the chimney top - a
-roof built down onto the stack, a beam beside it - and start a fire against it. Each flame chance
+two in three of those go to the flames. The flames reach the three-by-three around the top of the
+chimney, from its mouth up two blocks - a roof laid on the stack or with a gap of air under it, a
+beam or a wall beside it, a corner diagonally off it - and the fire starts against what they reach. Each flame chance
 ignites at most one reachable fuel block; with a single one there, the default mean wait is fifteen
 seconds. The rest of the chances are sparks out of the front, which light what they come down by, a
 block or two out. The claim boundary and the rule that solid blocks stop them both hold, measured
