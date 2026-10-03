@@ -324,6 +324,92 @@ namespace Crucibulum.Tests
             Assert.True(pile.IsBurning, "and it is alight");
         }
 
+        [VsTest(TimeoutMs = 120000)]
+        public async Task AThrowOfSparksFindsALogBesideTheForgeAboutOneTimeInFive()
+        {
+            // How often one throw catches, not how a melt schedules its throws: that is the landing
+            // rate's business. A lone log beside the forge has two open spaces next to it that a spark
+            // can come down in - a third is behind the log, which is in the way - of the seventy-five
+            // landing spots drawn, three of them back into the forge and thrown away. Eight sparks a
+            // throw find one about one time in five (19%), so under a minute of melting at the default
+            // gap; one spark a throw, about one time in thirty-five.
+            //
+            // Sixty throws, from fixed seeds so the run repeats: a sample, so the bound sits well below
+            // the eleven or twelve expected, and well above the one or two a single spark would give.
+            World.SetBlock("game:forge", ForgePos);
+            BlockPos log = P(9, 1, 8);
+            await Ticks(2);
+            Allow(config: true, world: true);
+
+            var throwSparks = typeof(BlockEntityCrucibulumForge).GetMethod("ThrowSparks", BindingFlags.NonPublic | BindingFlags.Instance);
+            int caught = 0;
+            for (int seed = 0; seed < 60; seed++)
+            {
+                World.SetBlock(LogCode, log);
+                await Ticks(1);
+                if ((bool)throwSparks.Invoke(Forge, new object[] { new System.Random(seed) })) caught++;
+
+                // Put the log back and clear any fire against it.
+                foreach (BlockFacing f in BlockFacing.ALLFACES)
+                {
+                    BlockPos next = log.AddCopy(f);
+                    if (!next.Equals(ForgePos) && !next.Equals(log.DownCopy())) Sapi.World.BlockAccessor.SetBlock(0, next);
+                }
+            }
+
+            Log($"  {caught} of 60 throws caught");
+            Assert.Greater(caught, 7, "about one in five throws catch, with eight sparks to a throw");
+        }
+
+        [VsTest(TimeoutMs = 120000)]
+        public async Task AThrowLightsOneThingHoweverMuchIsThere()
+        {
+            // A throw is one chance at a fire: with logs all round the forge it stops at the first spark
+            // that starts something, and leaves the rest for the throws after.
+            World.SetBlock("game:forge", ForgePos);
+            BlockPos[] logs = { P(9, 1, 8), P(7, 1, 8), P(8, 1, 9), P(8, 1, 7), P(10, 1, 10), P(6, 1, 6) };
+            foreach (BlockPos l in logs) World.SetBlock(LogCode, l);
+            await Ticks(2);
+            Allow(config: true, world: true);
+
+            var throwSparks = typeof(BlockEntityCrucibulumForge).GetMethod("ThrowSparks", BindingFlags.NonPublic | BindingFlags.Instance);
+            int throwsThatCaught = 0;
+            for (int seed = 0; seed < 20; seed++)
+            {
+                bool caught = (bool)throwSparks.Invoke(Forge, new object[] { new System.Random(seed) });
+                int fires = CountFires(ForgePos, 3);
+                Assert.True(fires <= 1, $"no more than one fire from one throw (seed {seed}): {fires}");
+                if (caught) throwsThatCaught++;
+
+                ClearFires(ForgePos, 3);
+            }
+
+            Log($"  {throwsThatCaught} of 20 throws caught");
+            Assert.Greater(throwsThatCaught, 0, "and some throws did catch, with this much wood about");
+        }
+
+        static int CountFires(BlockPos around, int r)
+        {
+            int n = 0;
+            var p = new BlockPos(around.dimension);
+            for (int x = -r; x <= r; x++) for (int y = -1; y <= 2; y++) for (int z = -r; z <= r; z++)
+            {
+                p.Set(around.X + x, around.Y + y, around.Z + z);
+                if (Sapi.World.BlockAccessor.GetBlock(p).Code?.Path == "fire") n++;
+            }
+            return n;
+        }
+
+        static void ClearFires(BlockPos around, int r)
+        {
+            var p = new BlockPos(around.dimension);
+            for (int x = -r; x <= r; x++) for (int y = -1; y <= 2; y++) for (int z = -r; z <= r; z++)
+            {
+                p.Set(around.X + x, around.Y + y, around.Z + z);
+                if (Sapi.World.BlockAccessor.GetBlock(p).Code?.Path == "fire") Sapi.World.BlockAccessor.SetBlock(0, p);
+            }
+        }
+
         [VsTest]
         public async Task TheLandingRateFollowsTheConfig()
         {

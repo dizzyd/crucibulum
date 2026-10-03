@@ -119,13 +119,14 @@ public class CrucibulumConfig
     public float MeltDoneSparkBurst = 1f;
 
     /// <summary>
-    /// With <see cref="SparksSpreadFire"/> on, how many seconds go by on average between sparks
-    /// coming down somewhere around a melting forge. Each one lands at random within two blocks, and
-    /// most of a workshop floor will not burn, so this is the rate of chances rather than of fires.
+    /// With <see cref="SparksSpreadFire"/> on, how many seconds go by on average between chances to
+    /// start a fire - for a melting forge, a handful of sparks coming down at random within two blocks;
+    /// for a burning bloomery, its flames or a spark from its front. Most of a workshop will not burn,
+    /// so this is the rate of chances rather than of fires.
     /// Read live.
     /// </summary>
     [Category("Sparks")]
-    [Description("With sparks spreading fire, average seconds between sparks landing around a melting forge.")]
+    [Description("With sparks spreading fire, average seconds between chances to start one, per forge or bloomery.")]
     [Range(1, 600)]
     public float SparkLandingSeconds = 10f;
 

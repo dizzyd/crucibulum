@@ -82,6 +82,9 @@ namespace Crucibulum.Tests
         static bool Lick(BlockPos at) => (bool)typeof(BEBehaviorBloomeryFire)
             .GetMethod("LickWithFlame", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(Fire, new object[] { at });
 
+        static void LickNearbyFuel(System.Random rand) => typeof(BEBehaviorBloomeryFire)
+            .GetMethod("LickNearbyFuel", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(Fire, new object[] { rand });
+
         static bool Spark(BlockPos at) => (bool)typeof(BEBehaviorBloomeryFire)
             .GetMethod("LandSpark", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(Fire, new object[] { at });
 
@@ -144,6 +147,82 @@ namespace Crucibulum.Tests
             var burning = FireOn(OverChimney);
             Assert.NotNull(burning, "a fire against the roof");
             Assert.Equal(OverChimney.Y, burning.FirePos.Y, "beside it, the chimney being in the way below");
+        }
+
+        [VsTest(TimeoutMs = 120000)]
+        public async Task LeftToBurnARoofOverTheStackCatchesOnItsOwn()
+        {
+            // The whole way through, by the bloomery's own tick and its own dice: nothing driven
+            // directly. One chance a second, the shortest gap the setting allows, so that what takes a
+            // minute or two at the default is over in seconds here.
+            await ABloomery();
+            World.SetBlock("game:air", Beam);
+            World.SetBlock(LogCode, OverChimney);
+            await Ticks(1);
+            Allow(bloomery: true, spread: true);
+            CrucibulumModSystem.Config.SparkLandingSeconds = 1;
+
+            long start = Sapi.World.ElapsedMilliseconds;
+            await Until(() => FireOn(OverChimney) != null, 1800, "the roof over the stack to catch");
+            Log($"  caught after {(Sapi.World.ElapsedMilliseconds - start) / 1000.0:0.0}s");
+        }
+
+        [VsTest]
+        public async Task OneChanceIsEnoughForWoodAnywhereAroundTheTop()
+        {
+            // The flames try everything they reach and light what burns, so wood over the stack,
+            // beside its mouth, or beside it just above, each catches at the first chance - whichever
+            // way the dice fall. A flame spending its chance on one spot of open air is what made a
+            // roof over the stack take minutes.
+            //
+            // Spread is only on for the attempt itself, with no tick in between: left on while the wood
+            // goes in, the bloomery's own tick could light it first, and the attempt under test would
+            // pass without having done anything.
+            await ABloomery();
+            World.SetBlock("game:air", Beam);
+
+            BlockPos[] places = { OverChimney, BesideChimney, Beam };
+            for (int seed = 0; seed < places.Length * 3; seed++)
+            {
+                BlockPos wood = places[seed % places.Length];
+                Allow(bloomery: true, spread: false);
+                World.SetBlock(LogCode, wood);
+                await Ticks(1);
+
+                Allow(bloomery: true, spread: true);
+                Assert.Null(FireOn(wood), "nothing alight before the attempt");
+                LickNearbyFuel(new System.Random(seed));
+                Assert.NotNull(FireOn(wood), $"wood at {wood} caught at the first chance (seed {seed})");
+                Allow(bloomery: true, spread: false);
+
+                // Clear the wood and the fire against it before the next round.
+                World.SetBlock("game:air", wood);
+                foreach (BlockFacing f in BlockFacing.ALLFACES)
+                {
+                    BlockPos next = wood.AddCopy(f);
+                    if (!next.Equals(ChimneyPos) && !next.Equals(BloomeryPos)) World.SetBlock("game:air", next);
+                }
+                await Ticks(1);
+            }
+        }
+
+        [VsTest]
+        public async Task OneChanceLightsOneThingHoweverMuchIsThere()
+        {
+            // A chance at a fire is one fire: with wood all round the top of the stack, the flames light
+            // the first piece that catches and leave the rest for the chances after. Spread on only for
+            // the attempt, as above.
+            await ABloomery();
+            BlockPos[] wood = { OverChimney, Beam, BesideChimney, P(7, 2, 8), P(8, 2, 9) };
+            foreach (BlockPos w in wood) World.SetBlock(LogCode, w);
+            await Ticks(1);
+
+            Allow(bloomery: true, spread: true);
+            LickNearbyFuel(new System.Random(0));
+            int burning = wood.Count(w => FireOn(w) != null);
+            Allow(bloomery: true, spread: false);
+
+            Assert.Equal(1, burning, "one piece of five alight after one chance");
         }
 
         [VsTest]

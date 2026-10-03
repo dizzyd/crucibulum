@@ -293,7 +293,7 @@ firepit, which reads its ingredients from whatever heat source is holding it.
 | `SparksSpreadFire` | let a melting charge's sparks start fires around the forge, if the world allows fire spread (off) |
 | `MeltSparkRate` | how many sparks a melting charge throws, as a multiple of the default (1); 0 for none |
 | `MeltDoneSparkBurst` | the burst of sparks when a melt finishes, as a multiple of the default (1); 0 for none |
-| `SparkLandingSeconds` | with sparks spreading fire, average seconds between sparks landing around a melting forge (10) |
+| `SparkLandingSeconds` | with sparks spreading fire, average seconds between chances to start one, per forge or bloomery (10) |
 | `BloomerySparks` | a burning bloomery throws flames from its chimney and sparks from its front; with `SparksSpreadFire`, they can start fires (off) |
 | `GateAirOpen`, `GateAirHalf`, `GateAirQuarter`, `GateAirShut` | what each notch does to the fire, as a share of full draught (1.0 / 0.85 / 0.7 / 0.55) |
 
@@ -331,12 +331,14 @@ also the one thing in the mod that needs a Harmony patch - see below for why.
 A charge throws sparks out of the crucible's mouth while it is melting, and stops once the metal
 is all liquid - a molten crucible only smokes. They are the sparks vanilla throws when a crucible
 is poured into a mold, and they build as the melt goes on: a trickle as it starts, thrown gently,
-growing to four times as many thrown as hard as a pour by the time the metal is nearly liquid. With `SparksSpreadFire` on, those sparks can set
-light to things. Every so often while the metal is melting - once every ten seconds on average,
-which `SparkLandingSeconds` sets - one comes down somewhere within two blocks of the forge. If it
-lands in an open space beside something that burns, it starts a fire there exactly as vanilla's
-spreading fire would, and if it lands on a pile of firewood or coal it lights the pile. Stone, clay
-and an empty floor do not care.
+growing to four times as many thrown as hard as a pour by the time the metal is nearly liquid.
+
+With `SparksSpreadFire` on, those sparks can set light to things. Every so often while the metal is
+melting - once every ten seconds on average, which `SparkLandingSeconds` sets - a handful of them
+come down at random within two blocks of the forge. One that lands in an open space beside something
+that burns starts a fire there exactly as vanilla's spreading fire would, and one that lands on a
+pile of firewood or coal lights the pile. Stone, clay and an empty floor do not care. A lone log
+beside the forge catches in about a minute of melting; a workshop floored in wood, much sooner.
 
 It is off by default, and needs the world's own `allowFireSpread` on as well. Read live.
 
@@ -364,11 +366,14 @@ behaviour by an asset patch.
 
 With `SparksSpreadFire` on as well, they can start fires on the same rules as the crucible's sparks.
 Each bloomery gets one chance at a fire per `SparkLandingSeconds` on average, as a crucible does, and
-two in three of those go to the flames. The flames set light to what they touch right around the
-chimney top - a roof built down onto the stack, a beam beside it - with the fire starting against
-it; the sparks to what they come down by, a block or two out in front. The claim boundary and the
-rule that solid blocks stop them both hold, measured from the bloomery: a stone cap on the stack
-keeps its flames to itself.
+two in three of those go to the flames. The flames reach what is right around the chimney top - a
+roof built down onto the stack, a beam beside it - and start a fire against it. Each flame chance
+ignites at most one reachable fuel block; with a single one there, the default mean wait is fifteen
+seconds. The rest of the chances are sparks out of the front, which light what they come down by, a
+block or two out. The claim boundary and the rule that solid blocks stop them both hold, measured
+from the bloomery: a stone cap on the stack keeps its flames to itself.
+
+The crucible works the same way: each chance is one fire at most, however much wood is about.
 
 ## How it hooks in
 

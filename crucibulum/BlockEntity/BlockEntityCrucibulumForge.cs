@@ -1436,6 +1436,16 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
     /// <summary>How far from the forge, in blocks, a spark can come down.</summary>
     public const int SparkReach = 2;
 
+    /// <summary>
+    /// How many sparks come down at each chance a melt has of starting a fire. Each lands somewhere
+    /// at random, and most of a workshop will not burn: a lone log beside a forge has two spots of
+    /// the seventy-two in reach that a spark could start it from. One at a time found one of them at
+    /// one chance in thirty-odd, six minutes of melting - longer than most melts last. Eight find one
+    /// at about one in five, under a minute at the default gap, without making wood near a forge a
+    /// certainty.
+    /// </summary>
+    public const int SparksPerChance = 8;
+
     protected void MaybeLandASpark(float dt)
     {
         if (!CrucibulumModSystem.Config.SparksSpreadFire) return;
@@ -1443,11 +1453,25 @@ public class BlockEntityCrucibulumForge : BlockEntityForge
         Random rand = Api.World.Rand;
         if (rand.NextDouble() >= SparkFire.LandingChance(dt)) return;
 
-        int dx = rand.Next(-SparkReach, SparkReach + 1);
-        int dz = rand.Next(-SparkReach, SparkReach + 1);
-        if (dx == 0 && dz == 0) return;   // back into the forge
+        ThrowSparks(rand);
+    }
 
-        LandSpark(Pos.AddCopy(dx, rand.Next(-1, 2), dz));
+    /// <summary>
+    /// <see cref="SparksPerChance"/> sparks, each coming down somewhere within reach, until one starts
+    /// something - one fire for the chance, however much there is around to burn. True if anything
+    /// caught.
+    /// </summary>
+    protected bool ThrowSparks(Random rand)
+    {
+        for (int i = 0; i < SparksPerChance; i++)
+        {
+            int dx = rand.Next(-SparkReach, SparkReach + 1);
+            int dz = rand.Next(-SparkReach, SparkReach + 1);
+            if (dx == 0 && dz == 0) continue;   // back into the forge
+
+            if (LandSpark(Pos.AddCopy(dx, rand.Next(-1, 2), dz))) return true;
+        }
+        return false;
     }
 
     /// <summary>

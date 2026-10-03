@@ -154,21 +154,49 @@ public class BEBehaviorBloomeryFire : BlockEntityBehavior
         Random rand = Api.World.Rand;
         if (rand.NextDouble() >= SparkFire.LandingChance(dt)) return;
 
-        if (rand.NextDouble() < FlameShare) LickWithFlame(FlameReach(rand));
+        if (rand.NextDouble() < FlameShare) LickNearbyFuel(rand);
         else LandSpark(SparkLanding(rand));
     }
 
     /// <summary>
-    /// Something the chimney's flames reach: whatever sits straight over its top, or beside it at the
-    /// height of its mouth or just above - where a roof or a wall built close to the stack would be.
+    /// The chimney's flames finding something to burn: they try everything they reach, in no
+    /// particular order, and set light to the first that catches - one fire for the chance, however
+    /// much is there to burn. A flame licks round whatever is there rather than landing on one spot,
+    /// so a single piece of wood anywhere around the top of the stack catches at the first chance,
+    /// where picking one spot at random spent most chances on open air.
     /// </summary>
-    private BlockPos FlameReach(Random rand)
+    private void LickNearbyFuel(Random rand)
+    {
+        flameReach ??= FlameReach();
+        for (int i = flameReach.Length - 1; i > 0; i--)
+        {
+            int j = rand.Next(i + 1);
+            (flameReach[i], flameReach[j]) = (flameReach[j], flameReach[i]);
+        }
+
+        foreach (BlockPos at in flameReach)
+        {
+            if (LickWithFlame(at)) return;
+        }
+    }
+
+    private BlockPos[] flameReach;
+
+    /// <summary>
+    /// What the chimney's flames reach: whatever sits straight over its top, and what is beside it at
+    /// the height of its mouth and just above - where a roof or a wall built close to the stack would be.
+    /// </summary>
+    private BlockPos[] FlameReach()
     {
         BlockPos chimney = Pos.UpCopy();
-        int dy = rand.Next(0, 2);
-        return rand.Next(5) == 0
-            ? chimney.UpCopy()
-            : chimney.AddCopy(BlockFacing.HORIZONTALS[rand.Next(4)]).Add(0, dy, 0);
+        var reach = new BlockPos[9];
+        reach[0] = chimney.UpCopy();
+        for (int i = 0; i < 4; i++)
+        {
+            reach[1 + i] = chimney.AddCopy(BlockFacing.HORIZONTALS[i]);
+            reach[5 + i] = chimney.AddCopy(BlockFacing.HORIZONTALS[i]).Up();
+        }
+        return reach;
     }
 
     /// <summary>Somewhere in front of the opening, a block or two out, at about floor height.</summary>
